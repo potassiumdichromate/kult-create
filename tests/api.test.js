@@ -271,3 +271,39 @@ test("no agent, no studio", async () => {
   assert.equal(r.status, 409);
   assert.equal(r.body.code, "NO_AGENT");
 });
+
+test("the CEO dashboard joins studio data with Creator Studio engagement", async () => {
+  fakeStudio.dashboard = async ({ agencyId, wallets, range }) => {
+    assert.ok(agencyId.startsWith("agy_"));
+    assert.ok(wallets.includes(owner.address.toLowerCase()));
+    return {
+      totals: { plays: 42, likes: 7, comments: 3, shares: 2, remixes: 1, earned: 120, kultPoints: 55 },
+      series: { range, points: [{ label: "Mon", plays: 42, games: 1, timeSeconds: 600 }] },
+      games: [{ id: "g1", title: "Test Game", plays: 42, likes: 7, comments: 3, shares: 2, remixes: 1, earned: 120, kpEarned: 55, recentComments: [{ id: "c1", username: "ana", text: "fun!" }] }]
+    };
+  };
+  const s = await signIn(owner);
+  const r = await call("GET", "/agency/dashboard?range=month", null, s.body.token);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.engagement, "ok");
+  assert.equal(r.body.totals.plays, 42);
+  assert.equal(r.body.series.range, "month");
+  const top = r.body.games[0];
+  assert.equal(top.published.gameId, "g1");
+  assert.equal(top.stats.plays, 42);
+  assert.equal(top.recentComments[0].text, "fun!");
+  assert.ok(top.changes >= 1); // the change request is folded into its game
+  assert.ok(r.body.totals.creditsSpent > 0);
+  assert.ok(r.body.team.find((m) => m.id === "producer").done > 0);
+  assert.equal(r.body.team.some((m) => m.id === "ceo"), false);
+
+  // Creator Studio down: the dashboard still answers with studio data.
+  fakeStudio.dashboard = async () => { throw new Error("Creator Studio is unreachable right now."); };
+  const down = await call("GET", "/agency/dashboard", null, s.body.token);
+  assert.equal(down.status, 200);
+  assert.equal(down.body.engagement, "unavailable");
+  assert.equal(down.body.totals.plays, 0);
+  assert.ok(down.body.games.length >= 1);
+  // Only signed-in studio owners can read it.
+  assert.equal((await call("GET", "/agency/dashboard")).status, 401);
+});

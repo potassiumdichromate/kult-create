@@ -135,6 +135,22 @@ export function createDemoApi() {
     candidates: async () => ({ candidates: [] }),
     register: async () => ({ agency }),
     ledger: async () => ({ entries: [] }),
+    dashboard: async (range) => {
+      const games = [...productions.values()].filter((p) => p.kind === "build").map((p, i) => ({
+        id: p.id, latestId: p.id, title: p.result?.title || p.brief.slice(0, 40), coverUrl: p.result?.coverUrl || null, mode: p.mode,
+        status: p.status, versions: p.status === "complete" ? 1 : 0, changes: 0, creditsSpent: p.cost, createdAt: p.createdAt,
+        published: p.published, stats: { plays: 120 - i * 30, likes: 18 - i * 4, comments: 6, shares: 3, remixes: 1, earned: 240, kpEarned: 60 },
+        recentComments: [{ id: "c" + i, username: "pixelfan", text: "The boss fight is so good!" }]
+      }));
+      const points = Array.from({ length: 7 }, (_, i) => ({ label: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i], plays: [3, 8, 5, 14, 22, 18, 30][i], games: i === 6 ? games.length : 0, timeSeconds: [60, 300, 200, 900, 1500, 1200, 2400][i], earned: [5, 20, 10, 40, 60, 50, 80][i] }));
+      const team = EMPLOYEES.filter((e) => e.id !== "ceo").map((e, i) => ({ ...e, done: (games.length || 1) * (3 + (i % 4)), errors: i === 7 ? 1 : 0 }));
+      const spent = 1000 - credits;
+      return {
+        studio: { ...agency, credits }, engagement: "ok", series: { range, points }, games, team,
+        totals: { plays: games.reduce((s, g) => s + g.stats.plays, 0), likes: 42, comments: 12, shares: 6, remixes: 2, earned: 480, kultPoints: 120, games: games.filter((g) => g.versions).length, published: 0, productions: productions.size, creditsLeft: credits, creditsSpent: spent, creditsRefunded: 0 },
+        ledger: [...productions.values()].reverse().map((p) => ({ at: p.createdAt, delta: -p.cost, reason: p.kind === "edit" ? "Game change" : `${p.mode === "ultra" ? "Ultra" : "Pro"} game` })).concat([{ at: Date.now() - 864e5, delta: 1000, reason: "Studio grant" }])
+      };
+    },
     linkOkx: async (id) => { agency.okxAgentId = id; agency.okx = { name: `OKX.ai Agent #${id}`, verified: true }; return { agency: { ...agency } }; },
     start: async ({ brief, mode }) => make("build", brief, mode, mode === "ultra" ? 100 : 40, null),
     edit: async (id, request) => { const parent = productions.get(id); return make("edit", request, parent?.mode || "pro", 10, id); },
@@ -149,7 +165,7 @@ export function createDemoApi() {
       timers.push(setTimeout(() => {
         p.status = "complete";
         const playUrl = URL.createObjectURL(new Blob([DEMO_GAME], { type: "text/html" }));
-        const art = p.events.find(([, e]) => e.nodeId === "cover")?.[1].image;
+        const art = p.events.find(([, e]) => e.nodeId === "cover" && e.image)?.[1].image;
         const parent = p.parentId ? productions.get(p.parentId) : null;
         p.result = { title: parent?.result?.title || p.brief.split(/\s+/).slice(0, 3).join(" "), playUrl, coverUrl: art || parent?.result?.coverUrl || null, quality: { acceptance: true, playtest: "passed" } };
         if (p.kind === "build") agency.gamesMade += 1;

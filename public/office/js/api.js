@@ -75,6 +75,7 @@ export const realApi = {
   agency: () => request("GET", "/agency"),
   linkOkx: (okxAgentId) => request("POST", "/agency/okx", { okxAgentId }),
   ledger: () => request("GET", "/ledger"),
+  dashboard: (range = "week") => request("GET", `/agency/dashboard?range=${encodeURIComponent(range)}`),
   start: (body) => request("POST", "/agency/productions", body),
   production: (id) => request("GET", `/agency/productions/${id}`),
   edit: (id, requestText) => request("POST", `/agency/productions/${id}/edits`, { request: requestText }),

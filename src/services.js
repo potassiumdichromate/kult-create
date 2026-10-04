@@ -37,5 +37,8 @@ export const creatorStudio = {
   // Imports the finished compute-layer run as a game owned by the studio's
   // wallet (art copied to R2, 0G provenance) and optionally publishes it.
   importRun: ({ runId, creatorWallet, studio: studioInfo, publish, gameId }) =>
-    studio("POST", "/api/internal/kult-create/games", { runId, creatorWallet, studio: studioInfo, publish, gameId })
+    studio("POST", "/api/internal/kult-create/games", { runId, creatorWallet, studio: studioInfo, publish, gameId }),
+  // Plays, likes, comments, shares, remixes and earnings of one studio's games.
+  dashboard: ({ agencyId, wallets, range }) =>
+    studio("GET", `/api/internal/kult-create/dashboard?${new URLSearchParams({ agencyId, wallets: wallets.join(","), range })}`)
 };

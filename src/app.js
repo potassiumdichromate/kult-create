@@ -9,6 +9,7 @@ import { creatorStudio as defaultStudio, computeLayer as defaultCompute } from "
 import { EMPLOYEES } from "./employees.js";
 import { arenaHealth } from "./arena.js";
 import { verifyPrivy, privyConfigured } from "./privy.js";
+import { buildDashboard } from "./dashboard.js";
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(40),
@@ -203,6 +204,12 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
   app.get("/agency", requireAuth, needAgency, wrap(async (req, res) => {
     const recent = await store.find("productions", { agencyId: req.agency.id }, { sort: { createdAt: -1 }, limit: 20 });
     res.json({ agency: req.agency, productions: recent.map(({ timeline, ...p }) => publicProduction({ ...p, timeline: [] })) });
+  }));
+
+  // The CEO dashboard (only the studio's own wallets can read it).
+  app.get("/agency/dashboard", requireAuth, needAgency, wrap(async (req, res) => {
+    const range = ["day", "week", "month", "year"].includes(req.query.range) ? req.query.range : "week";
+    res.json(await buildDashboard({ store, studio, agency: req.agency, range }));
   }));
 
   app.get("/ledger", requireAuth, needAgency, wrap(async (req, res) => {

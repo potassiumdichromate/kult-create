@@ -1,6 +1,7 @@
 import { Office, W, H } from "./world.js";
 import { realApi } from "./api.js";
 import { createDemoApi } from "./demo.js";
+import { renderDashboard } from "./dashboard.js";
 
 // Kult Create office: entrance → studio registration → the office, where the
 // CEO writes a brief and the employees build the game live.
@@ -179,6 +180,7 @@ async function loadPrivy() {
 }
 
 async function signOutEverywhere() {
+  setView("office");
   api.signOut();
   state.agency = null;
   try { await privyApi?.logout?.(); } catch { /* already signed out */ }
@@ -436,7 +438,7 @@ $("okx-link-form").addEventListener("submit", async (ev) => {
 async function enterOffice(agency, fresh = false) {
   state.agency = agency;
   for (const id of ["entrance", "register", "no-agent"]) show(id, false);
-  show("hud"); show("console"); show("feed");
+  show("hud"); show("console"); show("feed"); show("sidebar");
   $("studio-name").textContent = agency.name;
   $("studio-tagline").textContent = agency.tagline || "";
   renderOkxBadge(agency);
@@ -604,6 +606,80 @@ async function refreshAgency() {
 }
 
 // ------------------------------------------------------------------ result
+// ------------------------------------------------------------------ sidebar views
+// Office (the floor) and the CEO-only Dashboard; Studio opens the settings sheet.
+function setView(view, section) {
+  if (view === "studio") { openStudioSettings(); return; }
+  document.body.classList.toggle("view-dashboard", view === "dashboard");
+  show("dashboard", view === "dashboard");
+  for (const b of document.querySelectorAll(".nav-item")) {
+    const active = b.dataset.view === view && (b.dataset.section || null) === (section || null);
+    b.classList.toggle("active", active);
+    if (active) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  }
+  if (view === "dashboard") loadDashboard(section);
+  else requestAnimationFrame(fit);
+}
+for (const b of document.querySelectorAll(".nav-item")) b.addEventListener("click", () => setView(b.dataset.view, b.dataset.section));
+
+let dashLoading = null;
+async function loadDashboard(section) {
+  const bodyEl = $("dash-body");
+  if (!bodyEl.children.length || bodyEl.querySelector(".muted")) bodyEl.replaceChildren(el("p", { class: "muted" }, "Loading your studio…"));
+  const range = $("dash-range").value;
+  const request = (dashLoading = api.dashboard(range));
+  try {
+    const data = await request;
+    if (request !== dashLoading) return; // a newer load won
+    if (data.studio?.credits !== undefined) setCredits(data.studio.credits);
+    $("dash-notice").textContent = data.engagement === "ok" ? "" : "Plays, likes and comments are unavailable right now (Creator Studio didn't answer). Studio numbers below are up to date.";
+    show("dash-notice", data.engagement !== "ok");
+    renderDashboard(bodyEl, data, {
+      onOpenGame: openGameFromDashboard,
+      onPublishGame: publishFromDashboard,
+      onLinkOkx: () => { show("okx-link-error", false); show("okx-link"); }
+    });
+    if (section) $(section)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  } catch (e) {
+    bodyEl.replaceChildren(el("p", { class: "error" }, e.message));
+  }
+}
+$("dash-range").addEventListener("change", () => loadDashboard());
+$("dash-refresh").addEventListener("click", () => loadDashboard());
+
+async function openGameFromDashboard(game) {
+  try {
+    const { production } = await api.production(game.latestId);
+    openResult(production, production.result);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function publishFromDashboard(game) {
+  try {
+    toast("Publishing to Creator Studio…");
+    await api.publish(game.latestId, true);
+    toast(`"${game.title}" is live on Creator Studio.`);
+    loadDashboard();
+  } catch (e) { toast(e.message, true); }
+}
+
+function openStudioSettings() {
+  const a = state.agency;
+  if (!a) return;
+  const facts = [
+    ["Studio", a.name], ["Tagline", a.tagline || "—"],
+    ["CEO", `${a.ceo?.name || "Agent"} (INFT #${a.ceoTokenId})`],
+    ["OKX.ai", a.okxAgentId ? `#${a.okxAgentId} ${a.okx?.name ? `· ${a.okx.name}` : ""}` : "Not linked (optional)"],
+    ["Wallets", (a.ownerWallets || []).map(short).join(", ")],
+    ["Credits", (a.credits ?? 0).toLocaleString()],
+    ["Since", new Date(a.createdAt || Date.now()).toLocaleDateString()]
+  ];
+  $("studio-facts").replaceChildren(...facts.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)]));
+  show("studio-okx", !a.okxAgentId);
+  show("studio-settings");
+}
+$("studio-okx").addEventListener("click", () => { show("studio-settings", false); show("okx-link-error", false); show("okx-link"); });
+
 function openResult(production, result) {
   if (!result) return;
   state.resultFor = production;
