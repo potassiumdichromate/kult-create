@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kult Create</title>
+  <meta name="description" content="Run your own indie game studio in Kult World. Your 0G agent is the CEO; a team of AI specialists builds the games.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="office.css">
+</head>
+<body>
+  <div id="app">
+    <header id="hud" class="panel" hidden>
+      <div class="studio">
+        <div class="logo" aria-hidden="true">KC</div>
+        <div>
+          <div id="studio-name" class="display">Studio</div>
+          <div id="studio-tagline" class="muted small"></div>
+        </div>
+      </div>
+      <div class="badges">
+        <span id="okx-badge" class="badge" title="OKX.ai identity (ERC-8004 on X Layer)"></span>
+        <span id="ceo-badge" class="badge gold" title="CEO: your 0G INFT agent"></span>
+      </div>
+      <div class="credits" title="Studio credits">
+        <span class="coin" aria-hidden="true"></span>
+        <span id="credits" class="display">0</span>
+        <span class="muted small">credits</span>
+      </div>
+      <button id="exit" class="btn ghost small" hidden>Exit building</button>
+    </header>
+
+    <main id="stage">
+      <canvas id="office" aria-label="Your studio office"></canvas>
+      <div id="bubbles" aria-live="polite"></div>
+      <div id="tooltip" hidden></div>
+    </main>
+
+    <section id="console" class="panel" hidden>
+      <div class="console-head">
+        <h2 class="display">CEO console</h2>
+        <span id="console-status" class="muted small">Your team is ready.</span>
+      </div>
+      <form id="brief-form">
+        <label for="brief" class="sr-only">Game brief</label>
+        <textarea id="brief" rows="3" maxlength="2000" placeholder="Pitch your game to the team. e.g. A neon space shooter where you dodge asteroids and collect power-ups to beat the boss."></textarea>
+        <div class="modes" role="radiogroup" aria-label="Production quality">
+          <label class="mode">
+            <input type="radio" name="mode" value="pro" checked>
+            <span class="mode-card">
+              <span class="mode-name display">PRO</span>
+              <span class="mode-cost"><span id="cost-pro">40</span> credits</span>
+              <span class="mode-desc">5 drawn sprites, painted scene, phone playtest.</span>
+            </span>
+          </label>
+          <label class="mode">
+            <input type="radio" name="mode" value="ultra">
+            <span class="mode-card ultra">
+              <span class="mode-name display">ULTRA</span>
+              <span class="mode-cost"><span id="cost-ultra">100</span> credits</span>
+              <span class="mode-desc">Top models, 7 sprites, extra QA fixes.</span>
+            </span>
+          </label>
+        </div>
+        <button id="start" class="btn primary" type="submit">Start production</button>
+      </form>
+      <div id="working" hidden>
+        <div class="progress"><div id="progress-bar"></div></div>
+        <p id="working-text" class="muted">The team is on it.</p>
+      </div>
+    </section>
+
+    <aside id="feed" class="panel" hidden>
+      <div class="feed-head">
+        <h2 class="display">Studio floor</h2>
+        <button id="history-btn" class="btn ghost small" type="button">Games</button>
+      </div>
+      <ol id="log"></ol>
+    </aside>
+  </div>
+
+  <!-- Entrance: you need a studio to go in. -->
+  <div id="entrance" class="overlay">
+    <div class="sheet">
+      <div class="sign display"><span class="pink">KULT</span> <span class="blue">CREATE</span></div>
+      <p class="lead">The game studio building of Kult World.</p>
+      <div id="entrance-body">
+        <p>Only registered studios can go in. Get a studio first: register your indie studio as an <b>Agency</b> with your OKX.ai identity, and your 0G agent becomes its CEO.</p>
+        <ul class="perks">
+          <li><b>1,000 credits</b> to start</li>
+          <li><b>10 AI employees</b>: producer, designers, artists, engineer, QA and more</li>
+          <li>Publish games straight to <b>Kult Creator Studio</b></li>
+        </ul>
+        <button id="connect" class="btn primary">Connect wallet</button>
+        <p class="muted small">Signing in costs no gas and approves no transaction.</p>
+      </div>
+      <p id="entrance-error" class="error" hidden></p>
+    </div>
+  </div>
+
+  <!-- Registration -->
+  <div id="register" class="overlay" hidden>
+    <form id="register-form" class="sheet wide">
+      <h2 class="display">Register your studio</h2>
+      <p class="muted">Signed in as <span id="reg-wallets"></span> · <button type="button" id="link-wallet" class="linkish">Link another wallet</button></p>
+
+      <label class="field">Studio name
+        <input id="reg-name" maxlength="40" required placeholder="Pixel Pirates">
+      </label>
+      <label class="field">Tagline <span class="muted">(optional)</span>
+        <input id="reg-tagline" maxlength="120" placeholder="Tiny games, big hearts">
+      </label>
+
+      <fieldset class="field">
+        <legend>OKX.ai identity</legend>
+        <p class="muted small">Your ERC-8004 agent ID on X Layer. You must own it, or be its agent wallet.</p>
+        <div class="row">
+          <input id="reg-okx" inputmode="numeric" placeholder="Agent ID, e.g. 2170" required>
+          <button type="button" id="okx-lookup" class="btn small">Check</button>
+        </div>
+        <div id="okx-card" class="idcard" hidden></div>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>CEO</legend>
+        <p class="muted small">Your persistent KULT agent (AI Arena INFT on 0G) runs the studio.</p>
+        <div id="ceo-list" class="ceo-list"></div>
+        <div id="ceo-manual" class="row" hidden>
+          <input id="reg-ceo" inputmode="numeric" placeholder="INFT token ID">
+          <input id="reg-ceo-name" maxlength="60" placeholder="Agent name">
+        </div>
+      </fieldset>
+
+      <p id="register-error" class="error" hidden></p>
+      <div class="actions">
+        <button type="button" id="sign-out" class="btn ghost">Sign out</button>
+        <button type="submit" id="register-btn" class="btn primary">Open my studio</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Finished game -->
+  <div id="result" class="overlay" hidden>
+    <div class="sheet result">
+      <button id="result-close" class="close" aria-label="Close">×</button>
+      <div class="phone"><iframe id="player" title="Your game" allow="autoplay; fullscreen" sandbox="allow-scripts allow-same-origin allow-pointer-lock"></iframe></div>
+      <div class="result-side">
+        <p class="eyebrow">Shipped by your studio</p>
+        <h2 id="result-title" class="display">Game</h2>
+        <p id="result-quality" class="muted small"></p>
+        <div class="actions column">
+          <button id="publish" class="btn primary">Publish to Creator Studio</button>
+          <a id="published-link" class="btn ghost" target="_blank" rel="noopener" hidden>View on Creator Studio</a>
+          <a id="open-new-tab" class="btn ghost" target="_blank" rel="noopener">Play full screen</a>
+        </div>
+        <form id="edit-form" class="edit">
+          <label for="edit-text" class="small">Request changes <span class="muted">(<span id="cost-edit">10</span> credits)</span></label>
+          <textarea id="edit-text" rows="2" maxlength="1000" placeholder="Make the enemies faster and the player bigger."></textarea>
+          <button class="btn small" type="submit">Send to the team</button>
+        </form>
+        <p id="result-error" class="error" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game history -->
+  <div id="history" class="overlay" hidden>
+    <div class="sheet wide">
+      <button id="history-close" class="close" aria-label="Close">×</button>
+      <h2 class="display">Studio games</h2>
+      <ol id="history-list" class="history-list"></ol>
+    </div>
+  </div>
+
+  <div id="toast" role="status" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

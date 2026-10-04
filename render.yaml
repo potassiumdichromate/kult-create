@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: kult-create
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PUBLIC_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: PRIVY_APP_ID
+        sync: false
+      - key: PRIVY_VERIFICATION_KEY
+        sync: false
+      - key: COMPUTE_LAYER_URL
+        value: https://kult-compute-layer.onrender.com
+      - key: COMPUTE_LAYER_KEY
+        sync: false
+      - key: CREATOR_STUDIO_URL
+        value: https://creator-studio-pi5b.onrender.com
+      - key: CREATOR_STUDIO_KEY
+        sync: false
+      - key: CEO_INFT_VERIFY
+        value: arena
+      - key: AI_ARENA_DATABASE_URL
+        sync: false

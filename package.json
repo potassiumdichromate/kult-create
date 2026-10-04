@@ -1,0 +1,23 @@
+{
+  "name": "@kult/create",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kult Create: the game-studio building in Kult World. Studios register with their OKX.ai identity, their 0G INFT agent becomes CEO, and the compute layer's subagents work as employees in an isometric pixel office.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@privy-io/node": "^0.26.0",
+    "ethers": "^6.13.4",
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0",
+    "pg": "^8.23.1",
+    "zod": "^3.24.1"
+  }
+}
