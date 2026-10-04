@@ -346,9 +346,11 @@ export class Office {
   }
 
   paintScreen() {
-    const c = this.screenCanvas, s = c.getContext("2d"), S = this.screen;
+    // Logical 156x66; the canvas may be larger (4x in art mode) for sharp text.
+    const c = this.screenCanvas, s = c.getContext("2d"), S = this.screen, CW = 156, CH = 66;
+    s.setTransform(c.width / CW, 0, 0, c.height / CH, 0, 0);
     s.imageSmoothingEnabled = false;
-    s.fillStyle = "#0a1630"; s.fillRect(0, 0, c.width, c.height);
+    s.fillStyle = "#0a1630"; s.fillRect(0, 0, CW, CH);
     s.font = "8px 'Press Start 2P', monospace"; s.textBaseline = "top";
     if (S.mode === "idle") {
       s.fillStyle = "#5ec8f2"; s.fillText("KULT CREATE", 34, 14);
@@ -360,7 +362,7 @@ export class Office {
     if (S.image?.complete && S.image.naturalWidth) {
       const ih = S.mode === "done" ? 58 : 44;
       const iw = Math.round((S.image.naturalWidth / S.image.naturalHeight) * ih);
-      s.drawImage(S.image, S.mode === "done" ? 4 : c.width - iw - 4, 4, Math.min(iw, 70), ih);
+      s.drawImage(S.image, S.mode === "done" ? 4 : CW - iw - 4, 4, Math.min(iw, 70), ih);
     }
     s.font = "6px 'Press Start 2P', monospace";
     if (S.mode === "work") {
@@ -382,7 +384,7 @@ export class Office {
     }
     // scanlines
     s.fillStyle = "rgba(0,0,0,0.18)";
-    for (let y = 0; y < c.height; y += 2) s.fillRect(0, y, c.width, 1);
+    for (let y = 0; y < CH; y += 2) s.fillRect(0, y, CW, c.width > CW ? 0.5 : 1);
   }
 
   // ---------------------------------------------------------------- furniture
@@ -541,8 +543,13 @@ export class Office {
     for (const p of this.people.values()) if (!p.isCeo && p.desk && !p.path.length) [p.x, p.y] = this.seatOf(p.desk);
     for (const p of this.people.values()) if (p.isCeo && !p.path.length) { p.x = CEO_HOME[0]; p.y = CEO_HOME[1]; }
     this.W = manifest.canvas.width; this.H = manifest.canvas.height;
-    this.canvas.width = this.W; this.canvas.height = this.H;
+    // Draw at 2x: the painted room is native at that size and text stays sharp.
+    this.dpr = 2;
+    this.canvas.width = this.W * this.dpr; this.canvas.height = this.H * this.dpr;
     this.ctx.imageSmoothingEnabled = false;
+    this.screenCanvas.width = 156 * 4; this.screenCanvas.height = 66 * 4;
+    this.neonCanvas = document.createElement("canvas");
+    this.neonCanvas.width = 480; this.neonCanvas.height = 300;
     return true;
   }
 
@@ -556,12 +563,43 @@ export class Office {
   quadCenter(q) { return [(q.tl[0] + q.tr[0] + q.bl[0] + q.br[0]) / 4, (q.tl[1] + q.tr[1] + q.bl[1] + q.br[1]) / 4]; }
 
   // Draws an image into a wall parallelogram (tl, tr, bl corners).
-  drawInQuad(g, img, q) {
+  drawInQuad(g, img, q, smooth = false) {
     const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
     g.save();
-    g.setTransform((q.tr[0] - q.tl[0]) / w, (q.tr[1] - q.tl[1]) / w, (q.bl[0] - q.tl[0]) / h, (q.bl[1] - q.tl[1]) / h, q.tl[0], q.tl[1]);
+    g.transform((q.tr[0] - q.tl[0]) / w, (q.tr[1] - q.tl[1]) / w, (q.bl[0] - q.tl[0]) / h, (q.bl[1] - q.tl[1]) / h, q.tl[0], q.tl[1]);
+    g.imageSmoothingEnabled = smooth;
+    if (smooth) g.imageSmoothingQuality = "high";
     g.drawImage(img, 0, 0);
     g.restore();
+  }
+
+  // A smaller parallelogram inside q (fractions of its width/height).
+  insetQuad(q, ix, iy) {
+    const P = (u, v) => this.quadPoint(q, u, v);
+    return { tl: P(ix, iy), tr: P(1 - ix, iy), bl: P(ix, 1 - iy), br: P(1 - ix, 1 - iy) };
+  }
+
+  // Blinking neon "KULT CREATE" on the painted sign panel.
+  paintNeon() {
+    const c = this.neonCanvas, s = c.getContext("2d"), t = this.t;
+    s.setTransform(1, 0, 0, 1, 0, 0);
+    s.clearRect(0, 0, c.width, c.height);
+    s.fillStyle = "#16112e"; s.fillRect(0, 0, c.width, c.height);
+    // Each word buzzes on its own: steady, with rare quick flickers.
+    const flick = (seed) => { const k = Math.sin(t * 17 + seed) + Math.sin(t * 5.3 + seed * 3); return k < -1.75 ? 0.15 : k < -1.55 ? 0.6 : 1; };
+    const pulse = 0.85 + 0.15 * Math.sin(t * 2.4);
+    const word = (text, y, size, color, seed) => {
+      const a = flick(seed) * pulse;
+      s.font = `${size}px "Press Start 2P", monospace`;
+      s.textAlign = "center"; s.textBaseline = "middle";
+      s.globalAlpha = a;
+      s.shadowColor = color; s.shadowBlur = 28 * a;
+      s.fillStyle = color; s.fillText(text, c.width / 2, y);
+      s.shadowBlur = 8 * a; s.fillStyle = "#ffffff"; s.globalAlpha = a * 0.55; s.fillText(text, c.width / 2, y);
+      s.globalAlpha = 1; s.shadowBlur = 0;
+    };
+    word("KULT", c.height * 0.33, 86, "#ff4fa3", 1.1);
+    word("CREATE", c.height * 0.72, 62, "#3fe3ff", 4.7);
   }
 
   // Point at (u, v) in 0..1 board space of a wall parallelogram.
@@ -575,12 +613,13 @@ export class Office {
 
   drawArt() {
     const g = this.ctx, A = this.art;
-    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.imageSmoothingEnabled = false;
     g.drawImage(A.img, 0, 0, this.W, this.H);
-    // Live wall content.
+    // Live wall content, painted at high resolution.
     this.paintScreen();
-    this.drawInQuad(g, this.screenCanvas, A.bg.screen);
+    this.drawInQuad(g, this.screenCanvas, A.bg.screen, true);
+    if (A.bg.neon) { this.paintNeon(); this.drawInQuad(g, this.neonCanvas, this.insetQuad(A.bg.neon, 0.07, 0.1), true); }
     if (this.portrait?.complete && this.portrait.naturalWidth) this.drawInQuad(g, this.portrait, A.bg.portrait);
     this.notes.forEach((n, i) => {
       const col = i % 6, row = Math.floor(i / 6), u = 0.06 + col * 0.155, v = 0.1 + row * 0.22;
@@ -625,6 +664,10 @@ export class Office {
     if (p.walking) return 3;
     if (p.state === "done" && this.t - p.stateAt < 1.4) return 2;
     if (p.state === "working") return Math.floor(this.t * 3 + p.phase) % 4 === 0 ? 0 : 1;
+    // Idle: every few seconds glance at the screen and type for a moment.
+    p.fidgetAt ??= this.t + 2 + ((p.phase * 7) % 6);
+    if (this.t > p.fidgetAt + 1.1) p.fidgetAt = this.t + 4 + Math.random() * 8;
+    if (this.t > p.fidgetAt) return Math.floor(this.t * 6) % 2 ? 1 : 0;
     return 0;
   }
 
@@ -641,9 +684,15 @@ export class Office {
     const standing = frame >= 2 || p.isCeo;
     if (standing) { g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(fx, fy, fw * 0.3, 3, 0, 0, Math.PI * 2); g.fill(); }
     const bob = p.walking ? Math.floor(this.t * 8) % 2 : 0;
+    const hop = frame === 2 ? (Math.floor((this.t - p.stateAt) * 7) % 2) : 0;
+    // Breathing: the upper body rises half a pixel (one screen pixel at 2x)
+    // on each breath; everyone breathes at their own pace.
+    const breath = !p.walking && Math.sin(this.t * (1.9 + (p.phase % 0.6)) + p.phase) > 0.2 ? 0.5 : 0;
+    const x = Math.round(fx - fw / 2), y = Math.round(fy - fh + 1 - bob - hop), split = Math.round(fh * 0.58);
     g.save();
     if (p.walking && p.facing > 0) { g.translate(Math.round(fx) * 2, 0); g.scale(-1, 1); } // walk frame faces left
-    g.drawImage(img, frame * fw, 0, fw, fh, Math.round(fx - fw / 2), Math.round(fy - fh + 1 - bob), fw, fh);
+    g.drawImage(img, frame * fw, 0, fw, fh, x, y, fw, fh);
+    if (breath) g.drawImage(img, frame * fw, 0, fw, split, x, y - breath, fw, split); // no gap: drawn over the full frame
     g.restore();
   }
 

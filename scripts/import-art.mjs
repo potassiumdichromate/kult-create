@@ -34,6 +34,7 @@ const CALIBRATION = {
   screen: { tl: [978, 197], tr: [1215, 324], bl: [978, 334], br: [1215, 463] },
   portrait: { tl: [821, 122], tr: [878, 153], bl: [821, 227], br: [878, 259] },
   whiteboard: { tl: [359, 295], tr: [514, 217], bl: [359, 405], br: [514, 325] },
+  neon: { tl: [1262, 347], tr: [1406, 423], bl: [1262, 443], br: [1406, 518] },   // measured by eye (uneven shading)
   rugCenter: [975, 492]
 };
 
@@ -143,8 +144,8 @@ const scalePt = ([x, y]) => [+(x * BG_SCALE).toFixed(1), +(y * BG_SCALE).toFixed
 {
   const img = raw("office-background.png");
   if (img) {
-    const bg = resize(img, CANVAS.width, CANVAS.height);
-    save("office.png", bg);
+    // Full resolution: the office draws on a 2x canvas, so the room stays sharp.
+    save("office.png", img.width === CANVAS.width * 2 ? img : resize(img, CANVAS.width * 2, CANVAS.height * 2));
     const c = CALIBRATION, f = c.floor;
     const quad = (q) => ({ tl: scalePt(q.tl), tr: scalePt(q.tr), bl: scalePt(q.bl), br: scalePt(q.br) });
     manifest.background = {
@@ -156,10 +157,10 @@ const scalePt = ([x, y]) => [+(x * BG_SCALE).toFixed(1), +(y * BG_SCALE).toFixed
         ey: [+((f.left[0] - f.back[0]) / 12 * BG_SCALE).toFixed(3), +((f.left[1] - f.back[1]) / 12 * BG_SCALE).toFixed(3)],
         zScale: +((c.wallHeight * BG_SCALE) / 70).toFixed(3)   // the drawn office's wall is 70 units tall
       },
-      screen: quad(c.screen), portrait: quad(c.portrait), whiteboard: quad(c.whiteboard),
+      screen: quad(c.screen), portrait: quad(c.portrait), whiteboard: quad(c.whiteboard), neon: quad(c.neon),
       rugCenter: scalePt(c.rugCenter)
     };
-    console.log("background: office.png", CANVAS.width + "x" + CANVAS.height);
+    console.log("background: office.png", CANVAS.width * 2 + "x" + CANVAS.height * 2);
   }
 }
 

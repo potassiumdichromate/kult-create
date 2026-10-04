@@ -42,6 +42,8 @@ function fit() {
   scale = s >= 2 ? Math.floor(s) : Math.max(0.5, s);
   canvas.style.width = `${Math.round(office.W * scale)}px`;
   canvas.style.height = `${Math.round(office.H * scale)}px`;
+  // The art canvas is 2x: shrinking it must be smooth (no shimmer), enlarging stays crisp.
+  canvas.style.imageRendering = canvas.width > office.W * scale * (window.devicePixelRatio || 1) ? "auto" : "pixelated";
 }
 new ResizeObserver(fit).observe($("stage"));
 
