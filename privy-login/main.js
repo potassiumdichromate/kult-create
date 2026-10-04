@@ -39,7 +39,7 @@ const privyConfig = {
     theme: "dark",
     accentColor: "#FF7EB6",
     landingHeader: "Sign in to Kult Create",
-    loginMessage: "Use the same KULT account as AI Arena and Creator Studio: Google, email, or OKX, Bitget, MetaMask and other wallets.",
+    loginMessage: "Use your KULT account from AI Arena and Creator Studio.",
     showWalletLoginFirst: false,
     walletChainType: "ethereum-only",
     walletList: WALLET_LIST
