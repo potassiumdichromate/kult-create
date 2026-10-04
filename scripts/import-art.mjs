@@ -136,6 +136,37 @@ function dropHaze(img, min = 60) {
   return img;
 }
 
+// Removes a flat surround colour: flood fill from the image border over
+// pixels within `tol` of the corner colour. The room's near-black outline is
+// far enough from the violet surround to survive.
+function keyFlatSurround(img, tol = 24) {
+  const { width: W, height: H } = img, seen = new Uint8Array(W * H), stack = [];
+  const c = [img.data[0], img.data[1], img.data[2]];
+  for (let x = 0; x < W; x++) stack.push(x, 0, x, H - 1);
+  for (let y = 0; y < H; y++) stack.push(0, y, W - 1, y);
+  while (stack.length) {
+    const y = stack.pop(), x = stack.pop();
+    if (x < 0 || y < 0 || x >= W || y >= H || seen[y * W + x]) continue;
+    const o = at(img, x, y);
+    if (Math.abs(img.data[o] - c[0]) + Math.abs(img.data[o + 1] - c[1]) + Math.abs(img.data[o + 2] - c[2]) > tol) continue;
+    seen[y * W + x] = 1;
+    img.data.fill(0, o, o + 4); // fully clear (zeroed colour also compresses far better)
+    stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+  }
+  return img;
+}
+
+// Rounds colours to 5 bits per channel: invisible on this painted pixel art,
+// and it makes the PNG about 4x smaller (1.2 MB -> ~330 KB for the room).
+function posterize(img, bits = 5) {
+  const mask = (0xff << (8 - bits)) & 0xff, half = (1 << (8 - bits)) >> 1;
+  for (let i = 0; i < img.data.length; i += 4) {
+    if (!img.data[i + 3]) continue;
+    for (let c = 0; c < 3; c++) img.data[i + c] = Math.min(255, (img.data[i + c] & mask) + half);
+  }
+  return img;
+}
+
 const save = (name, img) => { writePng(join(OUT, name), img); return name; };
 const raw = (name) => (existsSync(join(RAW, name)) ? readPng(join(RAW, name)) : null);
 const scalePt = ([x, y]) => [+(x * BG_SCALE).toFixed(1), +(y * BG_SCALE).toFixed(1)];
@@ -144,8 +175,10 @@ const scalePt = ([x, y]) => [+(x * BG_SCALE).toFixed(1), +(y * BG_SCALE).toFixed
 {
   const img = raw("office-background.png");
   if (img) {
-    // Full resolution: the office draws on a 2x canvas, so the room stays sharp.
-    save("office.png", img.width === CANVAS.width * 2 ? img : resize(img, CANVAS.width * 2, CANVAS.height * 2));
+    // Full resolution (the office draws on a 2x canvas, so the room stays
+    // sharp), with the flat violet surround cut out so the room floats on the page.
+    const full = img.width === CANVAS.width * 2 ? img : resize(img, CANVAS.width * 2, CANVAS.height * 2);
+    save("office.png", posterize(keyFlatSurround(full)));
     const c = CALIBRATION, f = c.floor;
     const quad = (q) => ({ tl: scalePt(q.tl), tr: scalePt(q.tr), bl: scalePt(q.bl), br: scalePt(q.br) });
     manifest.background = {

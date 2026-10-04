@@ -23,7 +23,12 @@ const el = (tag, attrs = {}, ...kids) => {
   return n;
 };
 const short = (a) => (a && a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a || "");
-const show = (id, on = true) => { $(id).hidden = !on; };
+// The "Opening the studio…" loader stays up until the first real screen appears.
+const SCREENS = new Set(["entrance", "register", "no-agent", "hud"]);
+const show = (id, on = true) => {
+  $(id).hidden = !on;
+  if (on && SCREENS.has(id)) $("booting").hidden = true;
+};
 
 const state = {
   cfg: null, agency: null, staff: new Map(), current: null, unsubscribe: null,
@@ -165,6 +170,7 @@ async function boot() {
   } catch {
     $("entrance-error").textContent = "The studio building is closed right now. Try again in a minute.";
     show("entrance-error");
+    show("entrance");
     return;
   }
   const { credits, employees } = state.cfg;

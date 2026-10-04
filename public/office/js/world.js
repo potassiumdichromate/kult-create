@@ -614,6 +614,7 @@ export class Office {
   drawArt() {
     const g = this.ctx, A = this.art;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    g.clearRect(0, 0, this.W, this.H); // the room is cut out: the page shows around it
     g.imageSmoothingEnabled = false;
     g.drawImage(A.img, 0, 0, this.W, this.H);
     // Live wall content, painted at high resolution.

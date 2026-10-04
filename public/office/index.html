@@ -145,7 +145,14 @@
   </div>
 
   <!-- Entrance: you need a studio to go in. -->
-  <div id="entrance" class="overlay">
+  <div id="booting" class="overlay booting" role="status">
+    <div class="boot-box">
+      <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      <p class="display">Opening the studio…</p>
+    </div>
+  </div>
+
+  <div id="entrance" class="overlay" hidden>
     <div class="sheet">
       <div class="sign display"><span class="pink">KULT</span> <span class="blue">CREATE</span></div>
       <p class="lead">The game studio building of Kult World.</p>
