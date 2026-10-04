@@ -77,6 +77,9 @@ with no wallet or server calls. It is useful for demos and design work.
 
 ## Embedding in Kult World (Privy)
 
+> Full step-by-step guide (context, configuration, testing, troubleshooting):
+> [docs/KULT_WORLD_INTEGRATION.md](docs/KULT_WORLD_INTEGRATION.md).
+
 Kult World players are already signed in with Privy, so they walk into the
 building signed in. Kult World loads `/embed.js` and passes the player's
 Privy tokens to the office; Kult Create verifies them with the Privy app's
