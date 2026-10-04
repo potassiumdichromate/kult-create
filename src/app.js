@@ -263,7 +263,13 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
   // ------------------------------------------------------------ office
   // Drop-in script Kult World loads to open the office (cross-origin <script>).
   app.get("/embed.js", (_req, res) => { res.set("Cache-Control", "public, max-age=300"); res.sendFile(join(ROOT, "public", "embed.js")); });
-  app.use("/office", express.static(join(ROOT, "public", "office"), { maxAge: config.isProd ? "1h" : 0 }));
+  // Office files revalidate on every load (ETag), so a deploy shows up
+  // immediately; the Privy bundle's hashed chunks never change and cache forever.
+  app.use("/office", express.static(join(ROOT, "public", "office"), {
+    setHeaders: (res, path) => {
+      res.set("Cache-Control", /[\\/]privy[\\/]chunks[\\/]/.test(path) ? "public, max-age=31536000, immutable" : "no-cache");
+    }
+  }));
   app.get("/", (_req, res) => res.redirect(302, "/office/"));
 
   app.use((_req, res) => res.status(404).json({ error: "Not found" }));
