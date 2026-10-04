@@ -1,7 +1,7 @@
 import { Office, W, H } from "./world.js";
 import { realApi } from "./api.js";
 import { createDemoApi } from "./demo.js";
-import { renderDashboard } from "./dashboard.js";
+import { renderDashboard, renderTopGames } from "./dashboard.js";
 
 // Kult Create office: entrance → studio registration → the office, where the
 // CEO writes a brief and the employees build the game live.
@@ -112,6 +112,7 @@ function setCredits(n) {
   const changed = state.agency.credits !== n;
   state.agency.credits = n;
   $("credits").textContent = n.toLocaleString();
+  if ($("credits-big")) $("credits-big").textContent = n.toLocaleString();
   if (changed) { const c = $("credits").parentElement; c.classList.remove("bump"); void c.offsetWidth; c.classList.add("bump"); }
 }
 
@@ -608,22 +609,61 @@ async function refreshAgency() {
 // ------------------------------------------------------------------ result
 // ------------------------------------------------------------------ sidebar views
 // Office (the floor) and the CEO-only Dashboard; Studio opens the settings sheet.
-function setView(view, section) {
+const PANELS = { dashboard: "dashboard", games: "games-view", credits: "credits-view" };
+function setView(view) {
   if (view === "studio") { openStudioSettings(); return; }
-  document.body.classList.toggle("view-dashboard", view === "dashboard");
-  show("dashboard", view === "dashboard");
+  document.body.classList.toggle("view-panel", view in PANELS);
+  for (const [name, id] of Object.entries(PANELS)) show(id, name === view);
   for (const b of document.querySelectorAll(".nav-item")) {
-    const active = b.dataset.view === view && (b.dataset.section || null) === (section || null);
+    const active = b.dataset.view === view;
     b.classList.toggle("active", active);
     if (active) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   }
-  if (view === "dashboard") loadDashboard(section);
+  if (view === "dashboard") loadDashboard();
+  else if (view === "games") loadTopGames();
+  else if (view === "credits") renderCreditsView();
   else requestAnimationFrame(fit);
 }
-for (const b of document.querySelectorAll(".nav-item")) b.addEventListener("click", () => setView(b.dataset.view, b.dataset.section));
+for (const b of document.querySelectorAll(".nav-item")) b.addEventListener("click", () => setView(b.dataset.view));
+
+// Top games across every Kult Create studio.
+async function loadTopGames() {
+  const root = $("games-body");
+  if (!root.querySelector(".top-list")) root.replaceChildren(el("p", { class: "muted" }, "Loading top games…"));
+  try {
+    const { games } = await api.topGames();
+    renderTopGames(root, games, { onPlay: playTopGame });
+  } catch (e) {
+    root.replaceChildren(el("p", { class: "error" }, e.status === 503 || e.status === 502 ? "Top games are unavailable right now (Creator Studio didn't answer). Try again in a minute." : e.message));
+  }
+}
+$("games-refresh").addEventListener("click", loadTopGames);
+
+function playTopGame(g) {
+  $("player-title").textContent = g.title;
+  $("player-studio").textContent = g.mine ? "Your studio" : `By ${g.studio?.name || "a Kult Create studio"}`;
+  $("player-stats").textContent = `${(g.plays || 0).toLocaleString()} plays · ${(g.likes || 0).toLocaleString()} likes · ${(g.comments || 0).toLocaleString()} comments`;
+  $("player-2").src = g.playUrl;
+  $("player-full").href = g.playUrl;
+  const live = $("player-live");
+  live.hidden = !g.livePageUrl;
+  if (g.livePageUrl) live.href = g.livePageUrl;
+  show("player-sheet");
+}
+$("player-close").addEventListener("click", () => { show("player-sheet", false); $("player-2").src = "about:blank"; });
+
+// Credits: the balance and a way to add more.
+function renderCreditsView() {
+  $("credits-big").textContent = (state.agency?.credits ?? 0).toLocaleString();
+  const c = state.cfg?.credits || {};
+  $("cost-pro-2").textContent = c.pro ?? 40;
+  $("cost-ultra-2").textContent = c.ultra ?? 100;
+  $("cost-edit-2").textContent = c.edit ?? 10;
+}
+$("add-credits").addEventListener("click", () => show("credits-sheet"));
 
 let dashLoading = null;
-async function loadDashboard(section) {
+async function loadDashboard() {
   const bodyEl = $("dash-body");
   if (!bodyEl.children.length || bodyEl.querySelector(".muted")) bodyEl.replaceChildren(el("p", { class: "muted" }, "Loading your studio…"));
   const range = $("dash-range").value;
@@ -639,7 +679,6 @@ async function loadDashboard(section) {
       onPublishGame: publishFromDashboard,
       onLinkOkx: () => { show("okx-link-error", false); show("okx-link"); }
     });
-    if (section) $(section)?.scrollIntoView({ block: "start", behavior: "smooth" });
   } catch (e) {
     bodyEl.replaceChildren(el("p", { class: "error" }, e.message));
   }

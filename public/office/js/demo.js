@@ -135,6 +135,11 @@ export function createDemoApi() {
     candidates: async () => ({ candidates: [] }),
     register: async () => ({ agency }),
     ledger: async () => ({ entries: [] }),
+    topGames: async () => ({ games: [
+      { rank: 1, id: "t1", title: "Neon Drift", plays: 1840, likes: 212, comments: 48, shares: 31, studio: { name: "Arcade Owls" }, playUrl: null },
+      { rank: 2, id: "t2", title: "Carrot Kingdom", plays: 1203, likes: 150, comments: 22, shares: 12, studio: { name: "Farmhouse Games" }, playUrl: null },
+      ...[...productions.values()].filter((p) => p.status === "complete" && p.kind === "build").map((p, i) => ({ rank: 3 + i, id: p.id, title: p.result.title, thumbnailUrl: p.result.coverUrl, plays: 120, likes: 18, comments: 6, shares: 3, studio: { name: agency.name }, mine: true, playUrl: p.result.playUrl }))
+    ] }),
     dashboard: async (range) => {
       const games = [...productions.values()].filter((p) => p.kind === "build").map((p, i) => ({
         id: p.id, latestId: p.id, title: p.result?.title || p.brief.slice(0, 40), coverUrl: p.result?.coverUrl || null, mode: p.mode,

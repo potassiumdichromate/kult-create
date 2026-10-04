@@ -212,6 +212,21 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     res.json(await buildDashboard({ store, studio, agency: req.agency, range }));
   }));
 
+  // Top games across every Kult Create studio. Each one is playable in the
+  // office through the compute layer run that built it.
+  app.get("/games/top", requireAuth, needAgency, wrap(async (req, res) => {
+    const { games } = await studio.topGames({ limit: Math.min(Number(req.query.limit) || 20, 50) });
+    res.json({
+      games: games.map((g, i) => ({
+        ...g,
+        rank: i + 1,
+        mine: g.studio?.agencyId === req.agency.id,
+        playUrl: g.computeRunId ? `${config.computeLayer.url}/play/${encodeURIComponent(g.computeRunId)}` : g.playUrl,
+        livePageUrl: g.playUrl ?? null
+      }))
+    });
+  }));
+
   app.get("/ledger", requireAuth, needAgency, wrap(async (req, res) => {
     res.json({ entries: await store.find("ledger", { agencyId: req.agency.id }, { sort: { at: -1 }, limit: 100 }) });
   }));

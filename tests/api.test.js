@@ -307,3 +307,25 @@ test("the CEO dashboard joins studio data with Creator Studio engagement", async
   // Only signed-in studio owners can read it.
   assert.equal((await call("GET", "/agency/dashboard")).status, 401);
 });
+
+test("top games across Kult Create are playable in the office", async () => {
+  fakeStudio.topGames = async ({ limit }) => {
+    assert.equal(limit, 20);
+    return { games: [
+      { id: "g1", title: "Test Game", plays: 99, likes: 5, comments: 2, shares: 1, remixes: 0, studio: { agencyId: "someone-else", name: "Rivals" }, computeRunId: "run_9", playUrl: null },
+      { id: "g2", title: "Ours", plays: 50, likes: 1, comments: 0, shares: 0, remixes: 0, studio: { agencyId: null, name: "Pixel Pirates" }, computeRunId: null, playUrl: "https://studio/play?gameId=g2" }
+    ] };
+  };
+  const s = await signIn(owner);
+  const me = (await call("GET", "/agency", null, s.body.token)).body.agency;
+  const saved = fakeStudio.topGames;
+  fakeStudio.topGames = async (a) => { const out = await saved(a); out.games[1].studio.agencyId = me.id; return out; };
+  const r = await call("GET", "/games/top", null, s.body.token);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.games[0].rank, 1);
+  assert.match(r.body.games[0].playUrl, /\/play\/run_9$/);
+  assert.equal(r.body.games[0].mine, false);
+  assert.equal(r.body.games[1].mine, true);
+  assert.equal(r.body.games[1].playUrl, "https://studio/play?gameId=g2");
+  assert.equal((await call("GET", "/games/top")).status, 401);
+});

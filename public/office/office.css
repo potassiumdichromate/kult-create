@@ -184,7 +184,7 @@ button.badge.add { cursor: pointer; border-style: dashed; color: var(--blue); }
 button.badge.add:hover { border-color: var(--blue); }
 
 /* ---------------------------------------------------------------- sidebar + views */
-#app { grid-template-columns: 84px minmax(0, 1fr) 330px; grid-template-areas: "hud hud hud" "nav stage feed" "nav console feed"; }
+#app { grid-template-columns: 92px minmax(0, 1fr) 330px; grid-template-areas: "hud hud hud" "nav stage feed" "nav console feed"; }
 #sidebar { grid-area: nav; display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; }
 .nav-item { display: grid; justify-items: center; gap: 5px; padding: 10px 4px; background: transparent; border: 2px solid transparent; color: var(--muted); cursor: pointer; font: 7px var(--display); letter-spacing: 0.02em; }
 .nav-item .ico { width: 24px; height: 24px; fill: currentColor; }
@@ -192,7 +192,6 @@ button.badge.add:hover { border-color: var(--blue); }
 .nav-item.active { color: var(--gold); background: var(--panel-2); border-color: #7a5f1c; }
 .nav-item:focus-visible { outline: 2px dashed var(--text); }
 #dashboard { grid-area: 2 / 2 / 4 / 3; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; }
-body.view-dashboard #stage, body.view-dashboard #console { display: none; }
 
 /* ---------------------------------------------------------------- dashboard */
 .dash-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -248,8 +247,40 @@ select { background: #0e0a20; color: var(--text); border: 2px solid var(--line);
   #sidebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; flex-direction: row; justify-content: space-around; padding: 4px; border-radius: 0; }
   .nav-item { flex: 1; padding: 6px 2px; }
   #dashboard { grid-area: stage; }
-  body.view-dashboard #feed { display: none; }
   .game-row { grid-template-columns: 52px minmax(0, 1fr); }
   .game-row .thumb { width: 52px; height: 52px; }
   .game-row .acts { grid-column: 1 / -1; flex-direction: row; }
+}
+
+/* ---------------------------------------------------------------- views v2 */
+.nav-item { font: 600 11px var(--body); letter-spacing: 0; white-space: nowrap; }
+.view-panel, #dashboard { grid-area: 2 / 2 / 4 / 3; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; }
+body.view-panel #stage, body.view-panel #console { display: none; }
+.chart-wrap { padding: 10px; }
+#dash-chart { width: 100%; height: 220px; image-rendering: auto; }
+.top-list { display: grid; gap: 8px; margin-top: 12px; }
+.top-row { display: grid; grid-template-columns: 40px 64px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px; background: var(--panel-2); border: 2px solid var(--line); }
+.top-row.mine { border-color: #7a5f1c; }
+.top-row .rank { font: 14px var(--display); color: var(--muted); text-align: center; }
+.top-row:nth-child(1) .rank { color: var(--gold); }
+.top-row:nth-child(2) .rank { color: #c9d1e0; }
+.top-row:nth-child(3) .rank { color: #d08a4f; }
+.top-row .thumb { width: 64px; height: 64px; object-fit: cover; background: #0e0a20; border: 2px solid #000; }
+.top-row .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-row .meta { font-size: 13px; color: var(--muted); }
+.credit-card { display: flex; align-items: center; gap: 18px; padding: 22px; margin-top: 8px; background: var(--panel-2); border: 2px solid #7a5f1c; box-shadow: 4px 4px 0 #000; flex-wrap: wrap; }
+.coin.big { width: 40px; height: 40px; box-shadow: inset -8px -8px 0 #b8892a, 0 0 0 3px #000; }
+.credits-big { font-size: 32px; color: var(--gold); line-height: 1.2; }
+.btn.primary.add-credits { width: auto; margin-left: auto; padding: 14px 18px; }
+.costs { list-style: none; padding: 0; margin: 16px 0 0; display: flex; gap: 10px; flex-wrap: wrap; }
+.costs li { padding: 8px 12px; background: var(--panel-2); border: 2px solid var(--line); font-size: 14px; }
+.costs b { font: 8px var(--display); margin-right: 4px; }
+.costs span { color: var(--gold); font-weight: 600; }
+@media (max-width: 860px) {
+  .view-panel, #dashboard { grid-area: stage; }
+  body.view-panel #feed { display: none; }
+  .top-row { grid-template-columns: 28px 52px minmax(0, 1fr); }
+  .top-row .thumb { width: 52px; height: 52px; }
+  .top-row .acts { grid-column: 1 / -1; }
+  .btn.primary.add-credits { margin-left: 0; width: 100%; }
 }

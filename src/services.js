@@ -39,6 +39,8 @@ export const creatorStudio = {
   importRun: ({ runId, creatorWallet, studio: studioInfo, publish, gameId }) =>
     studio("POST", "/api/internal/kult-create/games", { runId, creatorWallet, studio: studioInfo, publish, gameId }),
   // Plays, likes, comments, shares, remixes and earnings of one studio's games.
+  // The most-played published Kult Create games across all studios.
+  topGames: ({ limit = 20 } = {}) => studio("GET", `/api/internal/kult-create/top-games?limit=${limit}`),
   dashboard: ({ agencyId, wallets, range }) =>
     studio("GET", `/api/internal/kult-create/dashboard?${new URLSearchParams({ agencyId, wallets: wallets.join(","), range })}`)
 };

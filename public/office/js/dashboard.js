@@ -30,34 +30,65 @@ const METRICS = {
   earned: { label: "Creator Score", get: (p) => p.earned, fmt: n, color: "#f2c14e" }
 };
 
-// Pixel bar chart on a small canvas, scaled up crisply by CSS.
+// Bar chart drawn at the canvas's real on-screen size (times the device
+// pixel ratio), so text stays sharp at any width. Bars keep the chunky look.
 function drawChart(canvas, points, metric) {
-  const W = 320, H = 90;
-  canvas.width = W; canvas.height = H;
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(280, Math.round(canvas.clientWidth || 600)), H = Math.round(canvas.clientHeight || 220);
+  canvas.width = W * dpr; canvas.height = H * dpr;
   const g = canvas.getContext("2d");
-  g.imageSmoothingEnabled = false;
-  g.fillStyle = "#0e0a20"; g.fillRect(0, 0, W, H);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
   const m = METRICS[metric];
-  const values = points.map(m.get);
-  const max = Math.max(1, ...values);
-  g.fillStyle = "#1e1640";
-  for (let y = 10; y < H - 12; y += 10) g.fillRect(0, y, W, 1);
-  if (!points.length) {
-    g.fillStyle = "#6b62a0"; g.font = "8px 'Press Start 2P', monospace"; g.fillText("NO DATA YET", W / 2 - 40, H / 2);
+  const values = points.map((p) => Number(m.get(p) || 0));
+  const max = Math.max(...values, 0);
+  const left = 54, right = 10, top = 22, bottom = 30;
+  const plotW = W - left - right, plotH = H - top - bottom;
+  const font = (px, weight = 400) => `${weight} ${px}px "Pixelify Sans", ui-sans-serif, sans-serif`;
+
+  // Value axis: 0, half, max (a nice round max so the grid reads well).
+  const niceMax = max <= 0 ? 1 : (() => { const p = 10 ** Math.floor(Math.log10(max)); const f = max / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; })();
+  g.font = font(12); g.textBaseline = "middle"; g.textAlign = "right";
+  for (const frac of [0, 0.5, 1]) {
+    const y = Math.round(top + plotH - frac * plotH) + 0.5;
+    g.strokeStyle = frac === 0 ? "#3a2f6e" : "#241a4a"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(left, y); g.lineTo(W - right, y); g.stroke();
+    g.fillStyle = "#a49cd0"; g.fillText(m.fmt(niceMax * frac), left - 8, y);
+  }
+
+  if (!points.length || max <= 0) {
+    g.textAlign = "center"; g.fillStyle = "#a49cd0"; g.font = font(15, 600);
+    g.fillText(`No ${m.label.toLowerCase()} in this period yet`, left + plotW / 2, top + plotH / 2);
+    drawXLabels(g, points, left, plotW, H, font);
     return;
   }
-  const slot = W / points.length, bw = Math.max(2, Math.floor(slot * 0.6));
+
+  const slot = plotW / points.length;
+  const bw = Math.max(4, Math.min(48, Math.floor(slot * 0.62)));
   points.forEach((p, i) => {
-    const h = Math.round((values[i] / max) * (H - 24));
-    const x = Math.round(i * slot + (slot - bw) / 2);
-    g.fillStyle = m.color; g.fillRect(x, H - 12 - h, bw, h);
-    g.fillStyle = "rgba(255,255,255,0.35)"; if (h > 1) g.fillRect(x, H - 12 - h, bw, 1);
+    const v = values[i];
+    const x = Math.round(left + i * slot + (slot - bw) / 2);
+    const h = v > 0 ? Math.max(3, Math.round((v / niceMax) * plotH)) : 0;
+    const y = top + plotH - h;
+    if (h) {
+      g.fillStyle = "#000"; g.fillRect(x + 3, y + 3, bw, h);           // pixel drop shadow
+      g.fillStyle = m.color; g.fillRect(x, y, bw, h);
+      g.fillStyle = "rgba(255,255,255,0.35)"; g.fillRect(x, y, bw, 3); // highlight
+      g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(x + bw - 3, y, 3, h); // shade
+      g.textAlign = "center"; g.textBaseline = "bottom"; g.fillStyle = "#ece8ff"; g.font = font(12, 600);
+      g.fillText(m.fmt(v), x + bw / 2, y - 3);
+    }
   });
-  // A handful of x labels so they never overlap.
-  g.fillStyle = "#a49cd0"; g.font = "6px 'Press Start 2P', monospace";
-  const every = Math.ceil(points.length / 6);
-  points.forEach((p, i) => { if (i % every === 0) g.fillText(String(p.label || "").slice(0, 6), Math.round(i * slot), H - 2); });
-  g.fillStyle = "#e8e8f0"; g.fillText(`MAX ${m.fmt(max)}`, 2, 8);
+  drawXLabels(g, points, left, plotW, H, font);
+}
+
+function drawXLabels(g, points, left, plotW, H, font) {
+  if (!points.length) return;
+  const slot = plotW / points.length;
+  g.font = font(12); g.fillStyle = "#a49cd0"; g.textAlign = "center"; g.textBaseline = "alphabetic";
+  const maxLabels = Math.max(2, Math.floor(plotW / 64));
+  const every = Math.ceil(points.length / maxLabels);
+  points.forEach((p, i) => { if (i % every === 0) g.fillText(String(p.label || ""), left + i * slot + slot / 2, H - 8); });
 }
 
 // Tiny pixel portrait of an employee for the team grid.
@@ -135,17 +166,6 @@ export function renderDashboard(root, data, { onOpenGame, onPublishGame, onLinkO
       el("div", {}, el("div", { class: "n" }, m.name || m.title), el("div", { class: "t" }, `${m.title} · ${n(m.done)} done${m.errors ? ` · ${m.errors} issues` : ""}`),
         el("div", { class: "bar" }, el("i", { style: `width:${Math.round((m.done / busiest) * 100)}%` }))))))));
 
-  // Credits
-  body.push(el("section", { class: "dash-section", id: "dash-credits" },
-    el("h3", {}, "Credits", el("small", {}, `${n(t.creditsLeft)} left`)),
-    data.ledger.length ? el("table", { class: "ledger" },
-      el("thead", {}, el("tr", {}, el("th", {}, "When"), el("th", {}, "What"), el("th", { class: "amt" }, "Credits"))),
-      el("tbody", {}, data.ledger.map((e) => el("tr", {},
-        el("td", { class: "muted" }, ago(e.at)),
-        el("td", {}, e.reason === "refund" ? "Refund (build failed)" : e.reason),
-        el("td", { class: `amt ${e.delta < 0 ? "neg" : "pos"}` }, `${e.delta > 0 ? "+" : ""}${n(e.delta)}`)))))
-      : el("p", { class: "empty-dash" }, "No credit activity yet.")));
-
   // OKX nudge for studios not yet on OKX.ai
   if (!data.studio.okxAgentId) {
     body.push(el("section", { class: "dash-section" }, el("div", { class: "notice" },
@@ -155,7 +175,11 @@ export function renderDashboard(root, data, { onOpenGame, onPublishGame, onLinkO
 
   root.replaceChildren(...body);
   drawChart(canvas, data.series.points || [], metric);
+  chartObserver?.disconnect();
+  chartObserver = new ResizeObserver(() => drawChart(canvas, data.series.points || [], metric));
+  chartObserver.observe(canvas);
 }
+let chartObserver = null;
 
 function stat(label, value, color) {
   return el("div", { class: "stat", style: `--c:${color}` }, el("span", { class: "k" }, label), el("span", { class: "v" }, value));
@@ -184,4 +208,21 @@ function gameRow(g, { onOpenGame, onPublishGame }) {
 
 function pill(label, value, color) {
   return el("span", { style: `--c:${color}` }, el("i"), `${n(value)} ${label}`);
+}
+
+export function renderTopGames(root, games, { onPlay }) {
+  if (!games.length) {
+    root.replaceChildren(el("p", { class: "empty-dash" }, "No published games yet. Be the first: make a game in the Office and publish it."));
+    return;
+  }
+  root.replaceChildren(el("div", { class: "top-list" }, games.map((g) => el("div", { class: `top-row${g.mine ? " mine" : ""}` },
+    el("span", { class: "rank" }, `#${g.rank}`),
+    g.thumbnailUrl ? el("img", { class: "thumb", src: g.thumbnailUrl, alt: "", loading: "lazy" }) : el("span", { class: "thumb" }),
+    el("div", { style: "min-width:0" },
+      el("div", { class: "title" }, g.title, g.mine ? el("span", { class: "tag ok" }, "Your studio") : null),
+      el("div", { class: "meta" }, g.studio?.name ? `by ${g.studio.name}` : "Kult Create studio"),
+      el("div", { class: "pills" },
+        pill("plays", g.plays, STAT_COLORS.plays), pill("likes", g.likes, STAT_COLORS.likes),
+        pill("comments", g.comments, STAT_COLORS.comments), pill("shares", g.shares, STAT_COLORS.shares))),
+    el("div", { class: "acts" }, g.playUrl ? el("button", { type: "button", class: "btn small", onclick: () => onPlay(g) }, "Play") : null)))));
 }
