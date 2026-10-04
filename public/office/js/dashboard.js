@@ -105,7 +105,7 @@ function portrait(color, seed) {
   return c;
 }
 
-export function renderDashboard(root, data, { onOpenGame, onPublishGame, onLinkOkx }) {
+export function renderDashboard(root, data, { onOpenGame, onPublishGame, onLinkOkx, portraitOf }) {
   const t = data.totals;
   const body = [];
 
@@ -162,7 +162,7 @@ export function renderDashboard(root, data, { onOpenGame, onPublishGame, onLinkO
   body.push(el("section", { class: "dash-section" },
     el("h3", {}, "Your team", el("small", {}, "Tasks completed")),
     el("div", { class: "team-grid" }, data.team.map((m, i) => el("div", { class: "member", style: `--c:${m.color}` },
-      portrait(m.color, i * 7 + m.id.length),
+      portraitOf?.(m.id) || portrait(m.color, i * 7 + m.id.length),
       el("div", {}, el("div", { class: "n" }, m.name || m.title), el("div", { class: "t" }, `${m.title} · ${n(m.done)} done${m.errors ? ` · ${m.errors} issues` : ""}`),
         el("div", { class: "bar" }, el("i", { style: `width:${Math.round((m.done / busiest) * 100)}%` }))))))));
 

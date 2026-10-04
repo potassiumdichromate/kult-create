@@ -43,12 +43,19 @@ let scale = 1;
 
 function fit() {
   const box = $("stage").getBoundingClientRect();
+  if (!box.width || !box.height) return; // hidden (another view is open)
   const s = Math.min(box.width / office.W, box.height / office.H);
-  scale = s >= 2 ? Math.floor(s) : Math.max(0.5, s);
+  if (office.art) {
+    // Draw at exactly the screen's pixel size: the browser never resamples
+    // the canvas, so the pixel art stays sharp at any window size.
+    scale = Math.max(0.5, s);
+    office.setPixelScale(scale * (window.devicePixelRatio || 1));
+  } else {
+    scale = s >= 2 ? Math.floor(s) : Math.max(0.5, s);
+  }
   canvas.style.width = `${Math.round(office.W * scale)}px`;
   canvas.style.height = `${Math.round(office.H * scale)}px`;
-  // The art canvas is 2x: shrinking it must be smooth (no shimmer), enlarging stays crisp.
-  canvas.style.imageRendering = canvas.width > office.W * scale * (window.devicePixelRatio || 1) ? "auto" : "pixelated";
+  canvas.style.imageRendering = "pixelated";
 }
 new ResizeObserver(fit).observe($("stage"));
 
@@ -160,7 +167,7 @@ async function loadArt() {
     if (emblem) document.querySelector(".logo")?.replaceChildren(el("img", { src: emblem, alt: "" }));
     const coin = icon("coin");
     if (coin) for (const c of document.querySelectorAll(".coin")) c.replaceWith(el("img", { class: `coin-img${c.classList.contains("big") ? " big" : ""}`, src: coin, alt: "" }));
-    requestAnimationFrame(fit);
+    fit();
   } catch (e) {
     console.warn("[kult-create] custom art not loaded", e);
   }
@@ -499,7 +506,7 @@ async function enterOffice(agency, fresh = false) {
   if (agency.ceo?.image) { const img = new Image(); img.crossOrigin = "anonymous"; img.src = agency.ceo.image; office.portrait = img; }
   office.lightsOn = true;
   office.screen = { mode: "idle", title: agency.name, progress: 0, image: null, lines: [] };
-  requestAnimationFrame(fit);
+  fit(); requestAnimationFrame(fit); // now, and again once the panels have laid out
   logSystem(fresh ? `Welcome to ${agency.name}! You have ${agency.credits.toLocaleString()} credits. Write a brief to start your first game.` : `Welcome back to ${agency.name}.`);
   setTimeout(() => say("ceo", fresh ? "Team, we're open for business!" : "Morning, team. What are we making today?"), 600);
   try {
@@ -672,7 +679,7 @@ function setView(view) {
   if (view === "dashboard") loadDashboard();
   else if (view === "games") loadTopGames();
   else if (view === "credits") renderCreditsView();
-  else requestAnimationFrame(fit);
+  else fit();
 }
 for (const b of document.querySelectorAll(".nav-item")) b.addEventListener("click", () => setView(b.dataset.view));
 
@@ -727,7 +734,8 @@ async function loadDashboard() {
     renderDashboard(bodyEl, data, {
       onOpenGame: openGameFromDashboard,
       onPublishGame: publishFromDashboard,
-      onLinkOkx: () => { show("okx-link-error", false); show("okx-link"); }
+      onLinkOkx: () => { show("okx-link-error", false); show("okx-link"); },
+      portraitOf: (id) => office.portraitOf(id)
     });
   } catch (e) {
     bodyEl.replaceChildren(el("p", { class: "error" }, e.message));

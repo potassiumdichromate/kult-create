@@ -555,6 +555,34 @@ export class Office {
     return true;
   }
 
+  // Canvas pixels per office pixel (set to match the screen; see app.js fit).
+  setPixelScale(k) {
+    if (!this.art || !(k > 0)) return;
+    const w = Math.round(this.W * k), h = Math.round(this.H * k);
+    if (w === this.canvas.width && h === this.canvas.height) return;
+    this.dpr = w / this.W;
+    this.canvas.width = w; this.canvas.height = h;
+  }
+
+  // Head-and-shoulders crop of an employee's sprite (for the dashboard).
+  portraitOf(id) {
+    const c = this.art?.manifest.characters?.[id], img = c && this.art.images[c.file];
+    if (!img) return null;
+    const [fw, fh] = c.frame, probe = document.createElement("canvas");
+    probe.width = fw; probe.height = fh;
+    const pg = probe.getContext("2d");
+    pg.drawImage(img, 0, 0, fw, fh, 0, 0, fw, fh);
+    const alpha = pg.getImageData(0, 0, fw, fh).data;
+    let top = 0;
+    while (top < fh && ![...Array(fw).keys()].some((x) => alpha[(top * fw + x) * 4 + 3] > 0)) top++;
+    const size = Math.round(fw * 0.82), out = document.createElement("canvas");
+    out.width = size; out.height = size;
+    const g = out.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    g.drawImage(img, Math.round((fw - size) / 2), top, size, size, 0, 0, size, size);
+    return out;
+  }
+
   // Canvas point -> grid (inverse of the floor projection, z = 0).
   gridAt([px, py]) {
     const pr = this.art.bg.projection, dx = px - pr.origin[0], dy = py - pr.origin[1];
@@ -618,7 +646,10 @@ export class Office {
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     g.clearRect(0, 0, this.W, this.H); // the room is cut out: the page shows around it
     g.imageSmoothingEnabled = false;
+    // The painted room samples smoothly at any screen scale; sprites stay sharp.
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
     g.drawImage(A.img, 0, 0, this.W, this.H);
+    g.imageSmoothingEnabled = false;
     // Live wall content, painted at high resolution.
     this.paintScreen();
     this.drawInQuad(g, this.screenCanvas, A.bg.screen, true);
