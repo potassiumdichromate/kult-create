@@ -169,7 +169,7 @@ async function loadPrivy() {
   privyApi = false;
   if (api.demo || embedded || !state.cfg?.privy || !state.cfg?.privyAppId) return null;
   try {
-    const mod = await import("./privy/kult-privy.js");
+    const mod = await import("../privy/kult-privy.js");
     privyApi = await mod.init({ appId: state.cfg.privyAppId, clientId: state.cfg.privyClientId || undefined });
   } catch (e) {
     console.warn("[kult-create] Privy login unavailable, using wallet signature", e);
