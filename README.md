@@ -63,6 +63,13 @@ Kult World ──iframe──▶ /office/ (this service)
    Creator Studio to import the run (art copied to its storage, 0G provenance,
    the same publish steps as a normal game) under the studio's wallet.
 
+## Custom art
+
+The office is drawn in code today. To make custom art for it (room,
+furniture, characters) in ChatGPT, follow
+[docs/art/ART_DIRECTION.md](docs/art/ART_DIRECTION.md): style guide,
+templates and copy-paste prompts.
+
 ## Run locally
 
 ```bash
