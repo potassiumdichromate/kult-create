@@ -14,7 +14,8 @@
 //   scaled together so every character has the same size, and laid out as a
 //   4-frame strip anchored at the feet.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPng, writePng, blank } from "./png.mjs";
@@ -313,5 +314,13 @@ for (const id of CHARACTERS) {
   console.log(`char-${id}: 4 frames of ${fw}x${fh}`);
 }
 
+// Revision = hash of every sprite file. The office adds it to each art URL
+// (?v=rev), so an art update can never be served from a stale cache.
+{
+  const files = [manifest.background?.file, ...Object.values(manifest.sprites).map((s) => s.file), ...Object.values(manifest.characters).map((c) => c.file), ...Object.values(manifest.icons).map((i) => i.file)].filter(Boolean).sort();
+  const h = createHash("sha1");
+  for (const f of files) h.update(f).update(readFileSync(join(OUT, f)));
+  manifest.rev = h.digest("hex").slice(0, 10);
+}
 writeFileSync(join(OUT, "manifest.json"), JSON.stringify(manifest, null, 2));
 console.log("manifest.json written");

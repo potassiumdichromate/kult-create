@@ -133,22 +133,24 @@ function busy(button, on, label) {
 // keeps its drawn look.
 async function loadArt() {
   try {
-    const res = await fetch("art/manifest.json", { cache: "no-cache" });
+    const res = await fetch(`art/manifest.json?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) return;
     const manifest = await res.json();
     const groups = [manifest.background ? [manifest.background] : [], Object.values(manifest.sprites || {}), Object.values(manifest.characters || {}), Object.values(manifest.icons || {})];
     const files = [...new Set(groups.flat().map((x) => x.file).filter(Boolean))];
+    // Versioned URLs: a new art import changes rev, so no cache serves old art.
+    const artUrl = (file) => `art/${file}${manifest.rev ? `?v=${manifest.rev}` : ""}`;
     const images = {};
     await Promise.all(files.map((file) => new Promise((resolve) => {
       const img = new Image();
       img.onload = () => { images[file] = img; resolve(); };
       img.onerror = resolve;
-      img.src = `art/${file}`;
+      img.src = artUrl(file);
     })));
     if (!office.useArt(manifest, images)) return;
     document.body.classList.add("has-art");
     // Sidebar and HUD icons from the art.
-    const icon = (name) => manifest.icons?.[name] && images[manifest.icons[name].file] ? `art/${manifest.icons[name].file}` : null;
+    const icon = (name) => manifest.icons?.[name] && images[manifest.icons[name].file] ? artUrl(manifest.icons[name].file) : null;
     for (const b of document.querySelectorAll(".nav-item")) {
       const src = icon(b.dataset.view);
       if (src) b.querySelector(".ico")?.replaceWith(el("img", { class: "ico", src, alt: "" }));
