@@ -413,13 +413,13 @@
     "berserker": {
       "file": "ceo-berserker.png",
       "frame": [
-        76,
-        112
+        45,
+        66
       ],
-      "scale": 0.5,
+      "scale": 1,
       "anchor": [
-        38,
-        111
+        22.5,
+        65
       ],
       "walkFaces": "right",
       "poses": [
@@ -436,13 +436,13 @@
     "tactician": {
       "file": "ceo-tactician.png",
       "frame": [
-        82,
-        112
+        49,
+        66
       ],
-      "scale": 0.5,
+      "scale": 1,
       "anchor": [
-        41,
-        111
+        24.5,
+        65
       ],
       "walkFaces": "right",
       "poses": [
@@ -459,13 +459,13 @@
     "defender": {
       "file": "ceo-defender.png",
       "frame": [
-        76,
-        112
+        45,
+        66
       ],
-      "scale": 0.5,
+      "scale": 1,
       "anchor": [
-        38,
-        111
+        22.5,
+        65
       ],
       "walkFaces": "right",
       "poses": [
@@ -482,13 +482,13 @@
     "assassin": {
       "file": "ceo-assassin.png",
       "frame": [
-        69,
-        112
+        41,
+        66
       ],
-      "scale": 0.5,
+      "scale": 1,
       "anchor": [
-        34.5,
-        111
+        20.5,
+        65
       ],
       "walkFaces": "right",
       "poses": [
@@ -505,13 +505,13 @@
     "support": {
       "file": "ceo-support.png",
       "frame": [
-        82,
-        112
+        49,
+        66
       ],
-      "scale": 0.5,
+      "scale": 1,
       "anchor": [
-        41,
-        111
+        24.5,
+        65
       ],
       "walkFaces": "right",
       "poses": [
@@ -528,13 +528,13 @@
     "hybrid": {
       "file": "ceo-hybrid.png",
       "frame": [
-        80,
-        112
+        48,
+        66
       ],
-      "scale": 0.5,
+      "scale": 1,
       "anchor": [
-        40,
-        111
+        24,
+        65
       ],
       "walkFaces": "right",
       "poses": [
@@ -549,5 +549,5 @@
       "portrait": "ceo-hybrid-portrait.png"
     }
   },
-  "rev": "b2eee283d9"
+  "rev": "43c57150fe"
 }

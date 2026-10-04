@@ -159,6 +159,19 @@ function keyFlatSurround(img, tol = 24) {
 
 // Rounds colours to 5 bits per channel: invisible on this painted pixel art,
 // and it makes the PNG about 4x smaller (1.2 MB -> ~330 KB for the room).
+// Small contrast + saturation lift so detail survives at sprite size.
+function punch(img, contrast = 1.18, saturation = 1.2) {
+  for (let i = 0; i < img.data.length; i += 4) {
+    if (!img.data[i + 3]) continue;
+    const r = img.data[i], g = img.data[i + 1], b = img.data[i + 2], l = 0.299 * r + 0.587 * g + 0.114 * b;
+    for (const [k, v] of [[0, r], [1, g], [2, b]]) {
+      const sat = l + (v - l) * saturation;
+      img.data[i + k] = Math.max(0, Math.min(255, (sat - 128) * contrast + 128));
+    }
+  }
+  return img;
+}
+
 function posterize(img, bits = 5) {
   const mask = (0xff << (8 - bits)) & 0xff, half = (1 << (8 - bits)) >> 1;
   for (let i = 0; i < img.data.length; i += 4) {
@@ -320,10 +333,11 @@ for (const id of CHARACTERS) {
 // layout: face icons, a turnaround row (front view first), a walk-cycle row,
 // then more poses. We take the front idle frame, the next turnaround frame
 // (a "glance"), the whole walk cycle, and the portrait bust for the wall.
-// Frames are stored at 2x (these figures are more detailed than the staff)
-// and drawn at the staff's size.
+// Frames are stored at true pixel size (drawn 1:1 like the staff, so they keep
+// the chunky pixel look), slightly taller than the staff, colours rounded to
+// crisp pixel tones.
 const ARCHETYPES = ["berserker", "tactician", "defender", "assassin", "support", "hybrid"];
-const CEO_HEIGHT = 56; // canvas px, same as the staff's walk height
+const CEO_HEIGHT = 64; // canvas px: a bit taller than the staff (~56)
 
 // Solid pixels: alpha >= 200, or (opaque sheets with a painted checkerboard)
 // everything except light neutral greys connected to the border.
@@ -396,8 +410,8 @@ for (const arch of ARCHETYPES) {
   if (!turn || !walkRow || walkRow.items.length < 6) { console.warn(`${name}: layout not recognised; skipped`); continue; }
   // The first 5 walk frames are side-on on every sheet (later ones can turn away).
   const frames = [turn.items[0], turn.items[1], ...walkRow.items.slice(0, 5)].map((c) => figure(img, mask, c));
-  const scale = (CEO_HEIGHT * 2) / turn.items[0].h; // stored at 2x
-  const scaled = frames.map((f) => hardenAlpha(resize(f, Math.max(1, Math.round(f.width * scale)), Math.max(1, Math.round(f.height * scale)))));
+  const scale = CEO_HEIGHT / turn.items[0].h;
+  const scaled = frames.map((f) => outline(posterize(punch(hardenAlpha(resize(f, Math.max(1, Math.round(f.width * scale)), Math.max(1, Math.round(f.height * scale))))), 5)));
   const fw = Math.max(...scaled.map((p) => p.width)), fh = Math.max(...scaled.map((p) => p.height));
   const strip = blank(fw * scaled.length, fh);
   scaled.forEach((p, i) => {
@@ -423,11 +437,11 @@ for (const arch of ARCHETYPES) {
   }
   manifest.ceo ??= {};
   manifest.ceo[arch] = {
-    file: `ceo-${arch}.png`, frame: [fw, fh], scale: 0.5, anchor: [fw / 2, fh - 1], walkFaces: "right",
+    file: `ceo-${arch}.png`, frame: [fw, fh], scale: 1, anchor: [fw / 2, fh - 1], walkFaces: "right",
     poses: ["idle", "glance", ...Array.from({ length: scaled.length - 2 }, (_, i) => `walk${i + 1}`)],
     portrait
   };
-  console.log(`ceo-${arch}: ${scaled.length} frames of ${fw}x${fh} (2x)${portrait ? " + portrait" : ""}`);
+  console.log(`ceo-${arch}: ${scaled.length} frames of ${fw}x${fh}${portrait ? " + portrait" : ""}`);
 }
 
 // Revision = hash of every sprite file. The office adds it to each art URL

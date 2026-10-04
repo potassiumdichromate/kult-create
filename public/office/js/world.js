@@ -640,6 +640,7 @@ export class Office {
     }
     items.sort((a, b) => a.k - b.k);
     for (const it of items) it.draw();
+    this.drawSteam(g, 13.0, 10.8);
     this.drawStatusIcons(g);
     this.drawParticles(g);
     if (!this.lightsOn) { g.fillStyle = "rgba(8,6,24,0.55)"; g.fillRect(0, 0, this.W, this.H); }
@@ -666,9 +667,34 @@ export class Office {
     g.drawImage(s.img, Math.round(fx - s.m.w / 2), Math.round(base - s.m.h + 1));
   }
 
+  // Happy: for ~3 s after finishing a task, or while the team celebrates.
+  isHappy(p) { return (p.state === "done" && this.t - p.stateAt < 3) || (p.celebrateUntil ?? 0) > this.t; }
+
+  // The whole team (and the CEO) cheers, slightly out of step.
+  celebrate(seconds = 5) {
+    let i = 0;
+    for (const p of this.people.values()) { p.celebrateUntil = this.t + seconds + (i++ % 4) * 0.15; p.celebrateFrom = this.t + (i % 3) * 0.12; }
+  }
+
+  // Pixel puffs of steam rising from the coffee machine.
+  drawSteam(g, x, y) {
+    const s = this.artSprite("sprites", "coffee");
+    if (!s) return;
+    const [fx] = iso(x, y), base = iso(x + 0.3, y + 0.3)[1];
+    const ex = Math.round(fx - s.m.w * 0.12), ey = Math.round(base - s.m.h + 4);
+    for (let i = 0; i < 8; i++) {
+      const k = (this.t * 0.4 + i / 8) % 1;               // 0 at the spout -> 1 at the top
+      const px = Math.round(ex + Math.sin(k * 6 + i * 1.7) * 3 + k * 3), py = Math.round(ey - k * 26);
+      const size = k < 0.3 ? 2 : 3;
+      g.fillStyle = `rgba(240,236,255,${(0.75 * (1 - k) ** 0.8).toFixed(3)})`;
+      g.fillRect(px, py, size, size);
+      if (k > 0.45) g.fillRect(px + size, py + 1, 2, 2);   // puffs widen as they rise
+    }
+  }
+
   artFrame(p) {
     if (p.walking) return 3;
-    if (p.state === "done" && this.t - p.stateAt < 1.4) return 2;
+    if (this.isHappy(p)) return 2;
     if (p.state === "working") return Math.floor(this.t * 3 + p.phase) % 4 === 0 ? 0 : 1;
     // Idle: every few seconds glance at the screen and type for a moment.
     p.fidgetAt ??= this.t + 2 + ((p.phase * 7) % 6);
@@ -704,7 +730,7 @@ export class Office {
       if (this.t > p.fidgetAt + 1.4) p.fidgetAt = this.t + 5 + Math.random() * 7;
       if (this.t > p.fidgetAt) frame = 1;
     }
-    const hop = p.state === "done" && this.t - p.stateAt < 1.4 ? Math.floor((this.t - p.stateAt) * 7) % 2 * 2 : 0;
+    const hop = !p.walking && this.isHappy(p) ? Math.floor((this.t - (p.celebrateFrom ?? p.stateAt)) * 7) % 2 * 2 : 0;
     const breath = !p.walking && Math.sin(this.t * 1.7 + p.phase) > 0.2 ? 0.5 : 0;
     const w = fw * s, h = fh * s, x = Math.round(fx - w / 2), y = Math.round(fy - h + 1 - hop);
     g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(fx, fy, w * 0.32, 3, 0, 0, Math.PI * 2); g.fill();
@@ -731,7 +757,7 @@ export class Office {
     const standing = frame >= 2 || p.isCeo;
     if (standing) { g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(fx, fy, fw * 0.3, 3, 0, 0, Math.PI * 2); g.fill(); }
     const bob = p.walking ? Math.floor(this.t * 8) % 2 : 0;
-    const hop = frame === 2 ? (Math.floor((this.t - p.stateAt) * 7) % 2) : 0;
+    const hop = frame === 2 ? (Math.floor((this.t - (p.celebrateFrom ?? p.stateAt)) * 7) % 2) : 0;
     // Breathing: the upper body rises half a pixel (one screen pixel at 2x)
     // on each breath; everyone breathes at their own pace.
     const breath = !p.walking && Math.sin(this.t * (1.9 + (p.phase % 0.6)) + p.phase) > 0.2 ? 0.5 : 0;

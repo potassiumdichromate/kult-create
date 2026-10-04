@@ -630,6 +630,7 @@ function finish(result, replay) {
   $("progress-bar").style.width = "100%";
   if (replay) return;
   office.confetti();
+  office.celebrate(5);
   say("ceo", `"${result?.title || "Our game"}" is done. Great work, everyone!`);
   logSystem(`"${result?.title}" shipped. Play it, publish it, or ask for changes.`);
   setTimeout(() => openResult(state.current, result), 1400);
