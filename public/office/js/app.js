@@ -669,7 +669,7 @@ async function refreshAgency() {
 const PANELS = { dashboard: "dashboard", games: "games-view", credits: "credits-view" };
 function setView(view) {
   if (view === "studio") { openStudioSettings(); return; }
-  document.body.classList.toggle("view-panel", view in PANELS);
+  document.body.classList.toggle("panel-open", view in PANELS);
   for (const [name, id] of Object.entries(PANELS)) show(id, name === view);
   for (const b of document.querySelectorAll(".nav-item")) {
     const active = b.dataset.view === view;
