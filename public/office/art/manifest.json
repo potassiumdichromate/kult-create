@@ -1,0 +1,394 @@
+{
+  "version": 1,
+  "canvas": {
+    "width": 768,
+    "height": 512
+  },
+  "background": {
+    "file": "office.png",
+    "projection": {
+      "origin": [
+        380,
+        127.5
+      ],
+      "ex": [
+        23.571,
+        13.393
+      ],
+      "ey": [
+        -26.833,
+        14.542
+      ],
+      "zScale": 1.536
+    },
+    "screen": {
+      "tl": [
+        489,
+        98.5
+      ],
+      "tr": [
+        607.5,
+        162
+      ],
+      "bl": [
+        489,
+        167
+      ],
+      "br": [
+        607.5,
+        231.5
+      ]
+    },
+    "portrait": {
+      "tl": [
+        410.5,
+        61
+      ],
+      "tr": [
+        439,
+        76.5
+      ],
+      "bl": [
+        410.5,
+        113.5
+      ],
+      "br": [
+        439,
+        129.5
+      ]
+    },
+    "whiteboard": {
+      "tl": [
+        179.5,
+        147.5
+      ],
+      "tr": [
+        257,
+        108.5
+      ],
+      "bl": [
+        179.5,
+        202.5
+      ],
+      "br": [
+        257,
+        162.5
+      ]
+    },
+    "rugCenter": [
+      487.5,
+      246
+    ]
+  },
+  "sprites": {
+    "desk": {
+      "file": "furniture-desk.png",
+      "w": 78,
+      "h": 69,
+      "anchor": [
+        39,
+        68
+      ]
+    },
+    "chair": {
+      "file": "furniture-chair.png",
+      "w": 34,
+      "h": 47,
+      "anchor": [
+        17,
+        46
+      ]
+    },
+    "podium": {
+      "file": "furniture-podium.png",
+      "w": 30,
+      "h": 40,
+      "anchor": [
+        15,
+        39
+      ]
+    },
+    "plant": {
+      "file": "furniture-plant.png",
+      "w": 30,
+      "h": 43,
+      "anchor": [
+        15,
+        42
+      ]
+    },
+    "cooler": {
+      "file": "furniture-cooler.png",
+      "w": 24,
+      "h": 53,
+      "anchor": [
+        12,
+        52
+      ]
+    },
+    "coffee": {
+      "file": "furniture-coffee.png",
+      "w": 40,
+      "h": 54,
+      "anchor": [
+        20,
+        53
+      ]
+    }
+  },
+  "characters": {
+    "producer": {
+      "file": "char-producer.png",
+      "frame": [
+        40,
+        58
+      ],
+      "anchor": [
+        20,
+        57
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "designer": {
+      "file": "char-designer.png",
+      "frame": [
+        43,
+        62
+      ],
+      "anchor": [
+        21.5,
+        61
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "artdirector": {
+      "file": "char-artdirector.png",
+      "frame": [
+        40,
+        62
+      ],
+      "anchor": [
+        20,
+        61
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "illustrator": {
+      "file": "char-illustrator.png",
+      "frame": [
+        40,
+        59
+      ],
+      "anchor": [
+        20,
+        58
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "background": {
+      "file": "char-background.png",
+      "frame": [
+        39,
+        58
+      ],
+      "anchor": [
+        19.5,
+        57
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "marketing": {
+      "file": "char-marketing.png",
+      "frame": [
+        38,
+        56
+      ],
+      "anchor": [
+        19,
+        55
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "engineer": {
+      "file": "char-engineer.png",
+      "frame": [
+        39,
+        59
+      ],
+      "anchor": [
+        19.5,
+        58
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "qa": {
+      "file": "char-qa.png",
+      "frame": [
+        43,
+        57
+      ],
+      "anchor": [
+        21.5,
+        56
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "playtester": {
+      "file": "char-playtester.png",
+      "frame": [
+        40,
+        59
+      ],
+      "anchor": [
+        20,
+        58
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    },
+    "publisher": {
+      "file": "char-publisher.png",
+      "frame": [
+        38,
+        57
+      ],
+      "anchor": [
+        19,
+        56
+      ],
+      "poses": [
+        "idle",
+        "typing",
+        "cheer",
+        "walk"
+      ]
+    }
+  },
+  "icons": {
+    "emblem": {
+      "file": "ui-emblem.png",
+      "w": 48,
+      "h": 39,
+      "anchor": [
+        24,
+        38
+      ]
+    },
+    "coin": {
+      "file": "ui-coin.png",
+      "w": 47,
+      "h": 48,
+      "anchor": [
+        23.5,
+        47
+      ]
+    },
+    "office": {
+      "file": "ui-office.png",
+      "w": 48,
+      "h": 43,
+      "anchor": [
+        24,
+        42
+      ]
+    },
+    "dashboard": {
+      "file": "ui-dashboard.png",
+      "w": 48,
+      "h": 38,
+      "anchor": [
+        24,
+        37
+      ]
+    },
+    "games": {
+      "file": "ui-games.png",
+      "w": 48,
+      "h": 31,
+      "anchor": [
+        24,
+        30
+      ]
+    },
+    "credits": {
+      "file": "ui-credits.png",
+      "w": 48,
+      "h": 39,
+      "anchor": [
+        24,
+        38
+      ]
+    },
+    "studio": {
+      "file": "ui-studio.png",
+      "w": 48,
+      "h": 47,
+      "anchor": [
+        24,
+        46
+      ]
+    },
+    "done": {
+      "file": "ui-done.png",
+      "w": 48,
+      "h": 41,
+      "anchor": [
+        24,
+        40
+      ]
+    },
+    "error": {
+      "file": "ui-error.png",
+      "w": 48,
+      "h": 43,
+      "anchor": [
+        24,
+        42
+      ]
+    }
+  }
+}

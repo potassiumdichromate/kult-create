@@ -284,3 +284,10 @@ body.view-panel #stage, body.view-panel #console { display: none; }
   .top-row .acts { grid-column: 1 / -1; }
   .btn.primary.add-credits { margin-left: 0; width: 100%; }
 }
+
+/* ---------------------------------------------------------------- custom art */
+.nav-item img.ico { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
+body.has-art .logo { background: none; box-shadow: none; }
+.logo img { width: 36px; height: 36px; object-fit: contain; image-rendering: pixelated; }
+.coin-img { width: 18px; height: 18px; object-fit: contain; image-rendering: pixelated; }
+.coin-img.big { width: 44px; height: 44px; }

@@ -1,4 +1,4 @@
-import { Office, W, H } from "./world.js";
+import { Office } from "./world.js";
 import { realApi } from "./api.js";
 import { createDemoApi } from "./demo.js";
 import { renderDashboard, renderTopGames } from "./dashboard.js";
@@ -38,10 +38,10 @@ let scale = 1;
 
 function fit() {
   const box = $("stage").getBoundingClientRect();
-  const s = Math.min(box.width / W, box.height / H);
+  const s = Math.min(box.width / office.W, box.height / office.H);
   scale = s >= 2 ? Math.floor(s) : Math.max(0.5, s);
-  canvas.style.width = `${Math.round(W * scale)}px`;
-  canvas.style.height = `${Math.round(H * scale)}px`;
+  canvas.style.width = `${Math.round(office.W * scale)}px`;
+  canvas.style.height = `${Math.round(office.H * scale)}px`;
 }
 new ResizeObserver(fit).observe($("stage"));
 
@@ -121,6 +121,41 @@ function busy(button, on, label) {
   else { button.textContent = button.dataset.label || button.textContent; button.disabled = false; }
 }
 
+// ------------------------------------------------------------------ custom art
+// public/office/art/ (built by scripts/import-art.mjs). Without it the office
+// keeps its drawn look.
+async function loadArt() {
+  try {
+    const res = await fetch("art/manifest.json", { cache: "no-cache" });
+    if (!res.ok) return;
+    const manifest = await res.json();
+    const groups = [manifest.background ? [manifest.background] : [], Object.values(manifest.sprites || {}), Object.values(manifest.characters || {}), Object.values(manifest.icons || {})];
+    const files = [...new Set(groups.flat().map((x) => x.file).filter(Boolean))];
+    const images = {};
+    await Promise.all(files.map((file) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => { images[file] = img; resolve(); };
+      img.onerror = resolve;
+      img.src = `art/${file}`;
+    })));
+    if (!office.useArt(manifest, images)) return;
+    document.body.classList.add("has-art");
+    // Sidebar and HUD icons from the art.
+    const icon = (name) => manifest.icons?.[name] && images[manifest.icons[name].file] ? `art/${manifest.icons[name].file}` : null;
+    for (const b of document.querySelectorAll(".nav-item")) {
+      const src = icon(b.dataset.view);
+      if (src) b.querySelector(".ico")?.replaceWith(el("img", { class: "ico", src, alt: "" }));
+    }
+    const emblem = icon("emblem");
+    if (emblem) document.querySelector(".logo")?.replaceChildren(el("img", { src: emblem, alt: "" }));
+    const coin = icon("coin");
+    if (coin) for (const c of document.querySelectorAll(".coin")) c.replaceWith(el("img", { class: `coin-img${c.classList.contains("big") ? " big" : ""}`, src: coin, alt: "" }));
+    requestAnimationFrame(fit);
+  } catch (e) {
+    console.warn("[kult-create] custom art not loaded", e);
+  }
+}
+
 // ------------------------------------------------------------------ entrance & registration
 async function boot() {
   try {
@@ -136,6 +171,7 @@ async function boot() {
   $("cost-edit").textContent = credits.edit;
   $("no-agent-create").href = state.cfg.aiArenaUrl || "https://app.kult.games";
   for (const e of employees) state.staff.set(e.id, e);
+  await loadArt();
   office.setStaff(employees, null);
   if (embedded) show("exit");
   // Inside Kult World the player is already signed in with Privy: ask the

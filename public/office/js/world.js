@@ -8,10 +8,13 @@ const OX = 304, OY = 80;           // screen position of grid corner (0,0)
 const ROOM_X = 14, ROOM_Y = 12;    // floor size in tiles
 const WALL = 70;                   // wall height in pixels
 
-export const iso = (gx, gy, z = 0) => [OX + (gx - gy) * 16, OY + (gx + gy) * 8 - z];
+const drawnIso = (gx, gy, z = 0) => [OX + (gx - gy) * 16, OY + (gx + gy) * 8 - z];
+// Grid -> canvas. Replaced by the art background's calibrated projection
+// when custom art is loaded (see Office.useArt).
+export let iso = drawnIso;
 
 // ------------------------------------------------------------------ layout
-// Desk centre (x, y); the employee sits behind it at y - 0.95, facing us.
+// Desk centre (x, y); the employee sits behind it (see seatOf), facing us.
 const DESKS = {
   producer: [2.2, 4], designer: [4.6, 4],
   artdirector: [7.4, 4], illustrator: [9.8, 4], background: [12.2, 4],
@@ -24,9 +27,9 @@ const DEPARTMENTS = [
   { label: "ENGINEERING", x: 4.6, y: 8, color: "#4dd4ac" },
   { label: "LAUNCH", x: 11, y: 8, color: "#ffd166" }
 ];
-const AISLES = [1.7, 5.75, 9.8];   // walkable rows: behind row A, between rows, front
+let AISLES = [1.7, 5.75, 9.8];     // walkable rows: behind row A, between rows, front
 const CORRIDOR_X = 13.55;          // walkable column on the right
-const CEO_HOME = [7, 1.7];
+let CEO_HOME = [7, 1.7];
 const SCREEN = { x0: 4.4, x1: 9.6, z0: 16, z1: 58 };
 
 const SKINS = ["#f5d0a9", "#e0ac69", "#c68642", "#8d5524", "#ffdbac", "#f1c27d"];
@@ -43,8 +46,10 @@ export class Office {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
+    this.W = W; this.H = H;
     canvas.width = W; canvas.height = H;
     this.ctx.imageSmoothingEnabled = false;
+    this.art = null;                 // custom art (manifest + images), see useArt()
     this.t = 0;
     this.people = new Map();
     this.particles = [];
@@ -64,7 +69,7 @@ export class Office {
       const h = hash(e.id + (e.name || ""));
       const isCeo = e.id === "ceo";
       const desk = DESKS[e.id];
-      const pos = isCeo ? [...CEO_HOME] : [desk[0], desk[1] - 0.95];
+      const pos = isCeo ? [...CEO_HOME] : this.seatOf(desk);
       this.people.set(e.id, {
         ...e,
         name: isCeo ? ceo?.name || "CEO" : e.name,
@@ -75,6 +80,10 @@ export class Office {
       });
     }
   }
+
+  // Where an employee sits: behind the monitor. The art desk has its monitor
+  // further left than the drawn one.
+  seatOf(desk) { return this.art ? [desk[0] - 0.75, desk[1] - 0.8] : [desk[0], desk[1] - 0.95]; }
 
   person(id) { return this.people.get(id); }
 
@@ -112,13 +121,13 @@ export class Office {
   packet(fromId, color) {
     const p = this.people.get(fromId);
     if (!p) return;
-    const [sx, sy] = iso(p.x, p.y, 34);
-    const [tx, ty] = iso((SCREEN.x0 + SCREEN.x1) / 2, 0, (SCREEN.z0 + SCREEN.z1) / 2);
+    const [sx, sy] = this.art ? this.artAnchor(p) : iso(p.x, p.y, 34);
+    const [tx, ty] = this.art ? this.quadCenter(this.art.bg.screen) : iso((SCREEN.x0 + SCREEN.x1) / 2, 0, (SCREEN.z0 + SCREEN.z1) / 2);
     this.particles.push({ kind: "packet", sx, sy, tx, ty, t0: this.t, dur: 0.9, color });
   }
 
   confetti() {
-    const [cx, cy] = iso((SCREEN.x0 + SCREEN.x1) / 2, 0, SCREEN.z1);
+    const [cx, cy] = this.art ? this.quadCenter(this.art.bg.screen) : iso((SCREEN.x0 + SCREEN.x1) / 2, 0, SCREEN.z1);
     const colors = ["#ff7eb6", "#7ee081", "#ffd166", "#5ec8f2", "#c792ea", "#f78c6b"];
     for (let i = 0; i < 90; i += 1) {
       this.particles.push({ kind: "confetti", x: cx + (Math.random() - 0.5) * 80, y: cy - Math.random() * 10, vx: (Math.random() - 0.5) * 70, vy: -40 - Math.random() * 60, t0: this.t, dur: 2.6 + Math.random(), color: colors[i % colors.length] });
@@ -131,11 +140,13 @@ export class Office {
   anchor(id) {
     const p = this.people.get(id);
     if (!p) return null;
+    if (this.art) return this.artAnchor(p);
     const sitting = !p.isCeo && !p.walking;
     return iso(p.x, p.y, sitting ? 44 : 44);
   }
 
   hit(x, y) {
+    if (this.art) return this.artHit(x, y);
     let best = null;
     for (const p of this.people.values()) {
       const [sx, sy] = iso(p.x, p.y, 0);
@@ -165,6 +176,7 @@ export class Office {
   }
 
   draw() {
+    if (this.art) { this.drawArt(); return; }
     const g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     if (!this.static) this.static = this.buildStatic();
@@ -508,6 +520,149 @@ export class Office {
     }
   }
 
+  // ---------------------------------------------------------------- custom art
+  // Uses the imported art (public/office/art/manifest.json, built by
+  // scripts/import-art.mjs). The background's measured floor corners give the
+  // grid projection, so desks, people and effects land on the painted room.
+  // Anything without a sprite (e.g. the CEO until delivered) is drawn as before.
+  useArt(manifest, images) {
+    const bg = manifest.background;
+    if (!bg || !images[bg.file]) return false;
+    const pr = bg.projection;
+    iso = (gx, gy, z = 0) => [pr.origin[0] + gx * pr.ex[0] + gy * pr.ey[0], pr.origin[1] + gx * pr.ex[1] + gy * pr.ey[1] - z * pr.zScale];
+    const first = !this.art;
+    this.art = { manifest, images, bg, img: images[bg.file] };
+    CEO_HOME = this.gridAt(bg.rugCenter);
+    if (first) {
+      // Keep the desk rows off the CEO rug in the painted room.
+      for (const d of Object.values(DESKS)) d[1] += 0.8;
+      AISLES = [1.7, 6.6, 10.4];
+    }
+    for (const p of this.people.values()) if (!p.isCeo && p.desk && !p.path.length) [p.x, p.y] = this.seatOf(p.desk);
+    for (const p of this.people.values()) if (p.isCeo && !p.path.length) { p.x = CEO_HOME[0]; p.y = CEO_HOME[1]; }
+    this.W = manifest.canvas.width; this.H = manifest.canvas.height;
+    this.canvas.width = this.W; this.canvas.height = this.H;
+    this.ctx.imageSmoothingEnabled = false;
+    return true;
+  }
+
+  // Canvas point -> grid (inverse of the floor projection, z = 0).
+  gridAt([px, py]) {
+    const pr = this.art.bg.projection, dx = px - pr.origin[0], dy = py - pr.origin[1];
+    const det = pr.ex[0] * pr.ey[1] - pr.ey[0] * pr.ex[1];
+    return [(dx * pr.ey[1] - pr.ey[0] * dy) / det, (pr.ex[0] * dy - dx * pr.ex[1]) / det];
+  }
+
+  quadCenter(q) { return [(q.tl[0] + q.tr[0] + q.bl[0] + q.br[0]) / 4, (q.tl[1] + q.tr[1] + q.bl[1] + q.br[1]) / 4]; }
+
+  // Draws an image into a wall parallelogram (tl, tr, bl corners).
+  drawInQuad(g, img, q) {
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    g.save();
+    g.setTransform((q.tr[0] - q.tl[0]) / w, (q.tr[1] - q.tl[1]) / w, (q.bl[0] - q.tl[0]) / h, (q.bl[1] - q.tl[1]) / h, q.tl[0], q.tl[1]);
+    g.drawImage(img, 0, 0);
+    g.restore();
+  }
+
+  // Point at (u, v) in 0..1 board space of a wall parallelogram.
+  quadPoint(q, u, v) { return [q.tl[0] + u * (q.tr[0] - q.tl[0]) + v * (q.bl[0] - q.tl[0]), q.tl[1] + u * (q.tr[1] - q.tl[1]) + v * (q.bl[1] - q.tl[1])]; }
+
+  artSprite(kind, name) {
+    const m = this.art.manifest[kind]?.[name];
+    const img = m && this.art.images[m.file];
+    return img ? { m, img } : null;
+  }
+
+  drawArt() {
+    const g = this.ctx, A = this.art;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(A.img, 0, 0, this.W, this.H);
+    // Live wall content.
+    this.paintScreen();
+    this.drawInQuad(g, this.screenCanvas, A.bg.screen);
+    if (this.portrait?.complete && this.portrait.naturalWidth) this.drawInQuad(g, this.portrait, A.bg.portrait);
+    this.notes.forEach((n, i) => {
+      const col = i % 6, row = Math.floor(i / 6), u = 0.06 + col * 0.155, v = 0.1 + row * 0.22;
+      this.poly(g, [this.quadPoint(A.bg.whiteboard, u, v), this.quadPoint(A.bg.whiteboard, u + 0.12, v), this.quadPoint(A.bg.whiteboard, u + 0.12, v + 0.17), this.quadPoint(A.bg.whiteboard, u, v + 0.17)], n.color);
+    });
+    // Depth-sorted scene.
+    const items = [];
+    for (const [x, y] of Object.values(DESKS)) items.push({ k: x + y + 0.5, draw: () => this.artDesk(g, x, y) });
+    for (const p of this.people.values()) items.push({ k: p.x + p.y + 0.02, draw: () => this.artPerson(g, p) });
+    for (const [name, x, y] of [["podium", 6.15, 1.1], ["plant", 0.7, 11.3], ["plant", 13.3, 0.7], ["cooler", 0.6, 0.6], ["coffee", 13.0, 10.8]]) {
+      items.push({ k: x + y, draw: () => this.artProp(g, name, x, y) });
+    }
+    items.sort((a, b) => a.k - b.k);
+    for (const it of items) it.draw();
+    this.drawStatusIcons(g);
+    this.drawParticles(g);
+    if (!this.lightsOn) { g.fillStyle = "rgba(8,6,24,0.55)"; g.fillRect(0, 0, this.W, this.H); }
+  }
+
+  artDesk(g, x, y) {
+    const s = this.artSprite("sprites", "desk");
+    if (!s) { this.drawDesk(g, x, y); return; }
+    const left = iso(x - 1, y + 0.45), right = iso(x + 1, y - 0.45), front = iso(x + 1, y + 0.45);
+    const cx = (left[0] + right[0]) / 2;
+    g.drawImage(s.img, Math.round(cx - s.m.w / 2), Math.round(front[1] - s.m.h + 2));
+    // Monitor glow while its employee works.
+    const p = [...this.people.values()].find((q) => q.desk && q.desk[0] === x && q.desk[1] === y);
+    if (p?.state === "working") {
+      g.fillStyle = `rgba(126,224,255,${0.18 + 0.08 * Math.sin(this.t * 6)})`;
+      g.fillRect(Math.round(cx - s.m.w * 0.36), Math.round(front[1] - s.m.h + 2), Math.round(s.m.w * 0.34), Math.round(s.m.h * 0.42));
+    }
+  }
+
+  artProp(g, name, x, y) {
+    const s = this.artSprite("sprites", name);
+    if (!s) return;
+    const [fx, fy] = iso(x, y), base = iso(x + 0.3, y + 0.3)[1];
+    g.drawImage(s.img, Math.round(fx - s.m.w / 2), Math.round(base - s.m.h + 1));
+  }
+
+  artFrame(p) {
+    if (p.walking) return 3;
+    if (p.state === "done" && this.t - p.stateAt < 1.4) return 2;
+    if (p.state === "working") return Math.floor(this.t * 3 + p.phase) % 4 === 0 ? 0 : 1;
+    return 0;
+  }
+
+  artPerson(g, p) {
+    const c = this.art.manifest.characters?.[p.id], img = c && this.art.images[c.file];
+    const [fx, fy] = iso(p.x, p.y);
+    if (!img) { // no sprite yet: the drawn character, scaled to the art
+      g.save(); g.translate(fx, fy); g.scale(1.8, 1.8); g.translate(-fx, -fy);
+      this.drawPerson(g, p);
+      g.restore();
+      return;
+    }
+    const [fw, fh] = c.frame, frame = this.artFrame(p);
+    const standing = frame >= 2 || p.isCeo;
+    if (standing) { g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(fx, fy, fw * 0.3, 3, 0, 0, Math.PI * 2); g.fill(); }
+    const bob = p.walking ? Math.floor(this.t * 8) % 2 : 0;
+    g.save();
+    if (p.walking && p.facing > 0) { g.translate(Math.round(fx) * 2, 0); g.scale(-1, 1); } // walk frame faces left
+    g.drawImage(img, frame * fw, 0, fw, fh, Math.round(fx - fw / 2), Math.round(fy - fh + 1 - bob), fw, fh);
+    g.restore();
+  }
+
+  artAnchor(p) {
+    const c = this.art.manifest.characters?.[p.id];
+    const [fx, fy] = iso(p.x, p.y);
+    return c ? [fx, fy - c.frame[1] - 2] : [fx, fy - 58];
+  }
+
+  artHit(x, y) {
+    let best = null;
+    for (const p of this.people.values()) {
+      const c = this.art.manifest.characters?.[p.id], [fx, fy] = iso(p.x, p.y);
+      const w = c ? c.frame[0] * 0.7 : 24, h = c ? c.frame[1] : 56;
+      if (x >= fx - w / 2 && x <= fx + w / 2 && y >= fy - h && y <= fy) if (!best || p.y > best.y) best = p;
+    }
+    return best;
+  }
+
   drawStatusIcons(g) {
     for (const p of this.people.values()) {
       const [ax, ay] = this.anchor(p.id).map(Math.round);
@@ -518,6 +673,10 @@ export class Office {
           g.fillStyle = on ? "#ffffff" : "rgba(255,255,255,0.3)";
           g.fillRect(ax - 5 + i * 4, ay - 4, 2, 2);
         }
+      } else if (this.art && (p.state === "done" && age < 5 || p.state === "error") && this.artSprite("icons", p.state)) {
+        const ic = this.artSprite("icons", p.state), w = 20, h = Math.round((ic.m.h / ic.m.w) * w);
+        const lift = p.state === "done" ? Math.min(6, age * 12) : 0;
+        g.drawImage(ic.img, Math.round(ax - w / 2), Math.round(ay - h - lift), w, h);
       } else if (p.state === "done" && age < 5) {
         const lift = Math.min(6, age * 12);
         g.fillStyle = "#1f6b3c"; g.fillRect(ax - 5, ay - 9 - lift, 11, 9);

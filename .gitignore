@@ -6,3 +6,5 @@ data
 .DS_Store
 # built by npm run build (privy-login/)
 public/office/privy/
+# raw ChatGPT art (see docs/art/ART_DIRECTION.md); the imported sprites are committed
+public/office/art/raw/
