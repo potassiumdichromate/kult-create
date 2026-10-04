@@ -7,7 +7,7 @@ import { createChallenge, verifyChallenge, issueToken, readToken, requireAuth, n
 import * as defaultChain from "./chain.js";
 import { creatorStudio as defaultStudio, computeLayer as defaultCompute } from "./services.js";
 import { EMPLOYEES } from "./employees.js";
-import { arenaHealth } from "./arena.js";
+import { arenaHealth, arenaEnabled, agentByToken } from "./arena.js";
 import { verifyPrivy, privyConfigured } from "./privy.js";
 import { buildDashboard } from "./dashboard.js";
 
@@ -62,8 +62,21 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     }
     return null;
   };
+  // Studios registered before the archetype was stored get it filled in from
+  // AI Arena the next time they load (the office draws the CEO from it).
+  const withArchetype = async (agency) => {
+    if (!agency || agency.ceo?.archetype || !arenaEnabled()) return agency;
+    try {
+      const agent = await agentByToken(agency.ceoTokenId);
+      if (!agent?.archetype) return agency;
+      const ceo = { ...agency.ceo, archetype: agent.archetype };
+      await store.update("agencies", agency.id, { ceo });
+      return { ...agency, ceo };
+    } catch { return agency; }
+  };
+
   const needAgency = wrap(async (req, res, next) => {
-    const agency = await agencyFor(req.session.wallets);
+    const agency = await withArchetype(await agencyFor(req.session.wallets));
     if (!agency) { res.status(404).json({ error: "You don't have a studio yet. Register one to enter.", code: "NO_AGENCY" }); return; }
     req.agency = agency;
     next();
@@ -142,7 +155,7 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
   }));
 
   app.get("/me", requireAuth, wrap(async (req, res) => {
-    const agency = await agencyFor(req.session.wallets);
+    const agency = await withArchetype(await agencyFor(req.session.wallets));
     res.json({ wallets: req.session.wallets, agency });
   }));
 
@@ -181,7 +194,7 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
       name: body.name, tagline: body.tagline,
       ...(okx ? { okxAgentId: okx.agentId, okx: okxRecord(okx) } : { okx: null }),
       ceoTokenId: ceo.tokenId,
-      ceo: { tokenId: ceo.tokenId, name: ceo.name, image: ceo.image, verified: ceo.verified, agentId: ceo.agentId ?? null, clan: ceo.clan ?? null, elo: ceo.elo ?? null, wallet: ceo.wallet ?? ceo.user ?? null },
+      ceo: { tokenId: ceo.tokenId, name: ceo.name, image: ceo.image, verified: ceo.verified, agentId: ceo.agentId ?? null, clan: ceo.clan ?? null, archetype: ceo.archetype ?? null, elo: ceo.elo ?? null, wallet: ceo.wallet ?? ceo.user ?? null },
       ownerWallets: req.session.wallets,
       credits: config.credits.starting,
       gamesMade: 0, gamesPublished: 0,

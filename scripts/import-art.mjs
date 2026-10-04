@@ -314,10 +314,126 @@ for (const id of CHARACTERS) {
   console.log(`char-${id}: 4 frames of ${fw}x${fh}`);
 }
 
+// ------------------------------------------------------------------ CEO (one sheet per archetype)
+// The CEO is the player's KULT agent, drawn from its archetype's AI Arena
+// sheet (Berserker.png, Tactician.png, ...). Every sheet follows the same
+// layout: face icons, a turnaround row (front view first), a walk-cycle row,
+// then more poses. We take the front idle frame, the next turnaround frame
+// (a "glance"), the whole walk cycle, and the portrait bust for the wall.
+// Frames are stored at 2x (these figures are more detailed than the staff)
+// and drawn at the staff's size.
+const ARCHETYPES = ["berserker", "tactician", "defender", "assassin", "support", "hybrid"];
+const CEO_HEIGHT = 56; // canvas px, same as the staff's walk height
+
+// Solid pixels: alpha >= 200, or (opaque sheets with a painted checkerboard)
+// everything except light neutral greys connected to the border.
+function ceoSolid(img) {
+  const { width: W, height: H, data } = img;
+  const mask = new Uint8Array(W * H);
+  let solidA = 0, n = 0;
+  for (let i = 3; i < data.length; i += 4 * 97) { n++; if (data[i] > 250) solidA++; }
+  const opaque = solidA / n > 0.98;
+  if (!opaque) { for (let i = 0; i < W * H; i++) mask[i] = data[i * 4 + 3] >= 200 ? 1 : 0; return { mask, opaque }; }
+  mask.fill(1);
+  const checker = (o) => { const mx = Math.max(data[o], data[o + 1], data[o + 2]), mn = Math.min(data[o], data[o + 1], data[o + 2]); return mn > 150 && mx - mn < 22; };
+  const stack = [];
+  for (let x = 0; x < W; x++) stack.push(x, 0, x, H - 1);
+  for (let y = 0; y < H; y++) stack.push(0, y, W - 1, y);
+  while (stack.length) {
+    const y = stack.pop(), x = stack.pop();
+    if (x < 0 || y < 0 || x >= W || y >= H) continue;
+    const k = y * W + x;
+    if (!mask[k] || !checker(k * 4)) continue;
+    mask[k] = 0;
+    stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+  }
+  return { mask, opaque };
+}
+
+function maskComponents(mask, W, H) {
+  const label = new Int32Array(W * H).fill(-1), out = [];
+  for (let s = 0; s < W * H; s++) {
+    if (!mask[s] || label[s] !== -1) continue;
+    const id = out.length, st = [s], pix = [];
+    label[s] = id;
+    let minx = 1e9, maxx = -1, miny = 1e9, maxy = -1;
+    while (st.length) {
+      const k = st.pop(), x = k % W, y = (k - x) / W;
+      pix.push(k);
+      if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y;
+      for (const nk of [k - 1, k + 1, k - W, k + W]) if (nk >= 0 && nk < W * H && mask[nk] && label[nk] === -1 && Math.abs((nk % W) - x) <= 1) { label[nk] = id; st.push(nk); }
+    }
+    out.push({ id, pix, minx, maxx, miny, maxy, w: maxx - minx + 1, h: maxy - miny + 1, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 });
+  }
+  return out;
+}
+
+// One figure (component pixels only, so neighbours never bleed in).
+function figure(img, mask, c) {
+  const out = blank(c.w, c.h);
+  for (const k of c.pix) {
+    const x = k % img.width, y = (k - x) / img.width, o = ((y - c.miny) * c.w + (x - c.minx)) * 4;
+    img.data.copy(out.data, o, k * 4, k * 4 + 3);
+    out.data[o + 3] = 255;
+  }
+  return out;
+}
+
+for (const arch of ARCHETYPES) {
+  const name = arch[0].toUpperCase() + arch.slice(1) + ".png";
+  const img = raw(name);
+  if (!img) continue;
+  const { mask, opaque } = ceoSolid(img);
+  const comps = maskComponents(mask, img.width, img.height);
+  // Figure-sized shapes right of the portrait, grouped into rows.
+  const figs = comps.filter((c) => c.h >= 80 && c.h <= 150 && c.w >= 40 && c.w <= 130 && c.pix.length > 1500 && c.minx > 300).sort((a, b) => a.cy - b.cy);
+  const rows = [];
+  for (const f of figs) { const r = rows.find((q) => Math.abs(q.cy - f.cy) < 40); if (r) { r.items.push(f); r.cy = (r.cy * (r.items.length - 1) + f.cy) / r.items.length; } else rows.push({ cy: f.cy, items: [f] }); }
+  rows.forEach((r) => r.items.sort((a, b) => a.cx - b.cx));
+  // Row 0 = face icons (square), row 1 = turnaround (tall), row 2 = walk cycle.
+  const body = rows.filter((r) => r.items.length >= 8 && r.items[0].h / r.items[0].w > 1.3);
+  const turn = body[0], walkRow = rows[rows.indexOf(turn) + 1];
+  if (!turn || !walkRow || walkRow.items.length < 6) { console.warn(`${name}: layout not recognised; skipped`); continue; }
+  // The first 5 walk frames are side-on on every sheet (later ones can turn away).
+  const frames = [turn.items[0], turn.items[1], ...walkRow.items.slice(0, 5)].map((c) => figure(img, mask, c));
+  const scale = (CEO_HEIGHT * 2) / turn.items[0].h; // stored at 2x
+  const scaled = frames.map((f) => hardenAlpha(resize(f, Math.max(1, Math.round(f.width * scale)), Math.max(1, Math.round(f.height * scale)))));
+  const fw = Math.max(...scaled.map((p) => p.width)), fh = Math.max(...scaled.map((p) => p.height));
+  const strip = blank(fw * scaled.length, fh);
+  scaled.forEach((p, i) => {
+    const ox = i * fw + Math.floor((fw - p.width) / 2), oy = fh - p.height;
+    for (let y = 0; y < p.height; y++) p.data.copy(strip.data, at(strip, ox, oy + y), y * p.width * 4, (y + 1) * p.width * 4);
+  });
+  save(`ceo-${arch}.png`, strip);
+
+  // Portrait bust (top-left): crop to the tall wall frame (about 5:9), on dark.
+  const bust = comps.filter((c) => c.maxx < 380 && c.maxy < 420 && c.w > 200).sort((a, b) => b.pix.length - a.pix.length)[0];
+  let portrait = null;
+  if (bust) {
+    const ph = bust.h, pw = Math.min(bust.w, Math.round(ph * 0.62));
+    const px0 = Math.round(bust.cx - pw / 2);
+    const crop = blank(pw, ph);
+    for (let y = 0; y < ph; y++) for (let x = 0; x < pw; x++) {
+      const sx = px0 + x, sy = bust.miny + y, o = (y * pw + x) * 4, s = (sy * img.width + sx) * 4;
+      const a = opaque ? (mask[sy * img.width + sx] ? 1 : 0) : img.data[s + 3] / 255; // painted checkerboard -> dark
+      crop.data[o] = img.data[s] * a + 18 * (1 - a); crop.data[o + 1] = img.data[s + 1] * a + 13 * (1 - a); crop.data[o + 2] = img.data[s + 2] * a + 38 * (1 - a); crop.data[o + 3] = 255;
+    }
+    portrait = `ceo-${arch}-portrait.png`;
+    save(portrait, resize(crop, 120, Math.round((ph / pw) * 120)));
+  }
+  manifest.ceo ??= {};
+  manifest.ceo[arch] = {
+    file: `ceo-${arch}.png`, frame: [fw, fh], scale: 0.5, anchor: [fw / 2, fh - 1], walkFaces: "right",
+    poses: ["idle", "glance", ...Array.from({ length: scaled.length - 2 }, (_, i) => `walk${i + 1}`)],
+    portrait
+  };
+  console.log(`ceo-${arch}: ${scaled.length} frames of ${fw}x${fh} (2x)${portrait ? " + portrait" : ""}`);
+}
+
 // Revision = hash of every sprite file. The office adds it to each art URL
 // (?v=rev), so an art update can never be served from a stale cache.
 {
-  const files = [manifest.background?.file, ...Object.values(manifest.sprites).map((s) => s.file), ...Object.values(manifest.characters).map((c) => c.file), ...Object.values(manifest.icons).map((i) => i.file)].filter(Boolean).sort();
+  const files = [manifest.background?.file, ...Object.values(manifest.sprites).map((s) => s.file), ...Object.values(manifest.characters).map((c) => c.file), ...Object.values(manifest.icons).map((i) => i.file), ...Object.values(manifest.ceo || {}).flatMap((c) => [c.file, c.portrait])].filter(Boolean).sort();
   const h = createHash("sha1");
   for (const f of files) h.update(f).update(readFileSync(join(OUT, f)));
   manifest.rev = h.digest("hex").slice(0, 10);

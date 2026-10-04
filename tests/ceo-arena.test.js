@@ -11,7 +11,7 @@ const { verifyCeo, ceoCandidates } = await import("../src/chain.js");
 const PLAYER = "0x1111111111111111111111111111111111111111";
 const OTHER = "0x2222222222222222222222222222222222222222";
 const rows = [
-  { agentId: "ca64007d-5095-4eae-b109-59fe3882aee3", name: "Nova", clan: "ZEROG", evolutionStage: "GENESIS", elo: 1200, wins: 3, losses: 1, tokenId: "1", wallet: PLAYER },
+  { agentId: "ca64007d-5095-4eae-b109-59fe3882aee3", name: "Nova", clan: "ZEROG", archetype: "TACTICIAN", evolutionStage: "GENESIS", elo: 1200, wins: 3, losses: 1, tokenId: "1", wallet: PLAYER },
   // Wrong pairing: this agent ID is token #1452 on chain, not #700.
   { agentId: "8e4ca4b1-43a7-4143-860b-5b1b2285f705", name: "Imposter", clan: "ZEROG", evolutionStage: "GENESIS", elo: 1000, wins: 0, losses: 0, tokenId: "700", wallet: PLAYER }
 ];
@@ -25,6 +25,7 @@ test("the player's AI Arena agent is accepted as CEO", async () => {
   assert.equal(ceo.verified, true);
   assert.equal(ceo.name, "Nova");
   assert.equal(ceo.agentId, rows[0].agentId);
+  assert.equal(ceo.archetype, "TACTICIAN"); // drives the CEO's sprite in the office
   assert.equal(ceo.owner, "0x043091b10bbcd3f8c5158c27ad291cc56b4f46db");
 });
 

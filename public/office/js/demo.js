@@ -51,7 +51,7 @@ export function createDemoApi() {
   const agency = {
     id: "agy_demo", name: "Pixel Pirates", tagline: "Tiny games, big hearts",
     okxAgentId: "2170", okx: { name: "Pixel Pirates (OKX.ai)", verified: true, owner: "0xdemo" },
-    ceoTokenId: "42", ceo: { tokenId: "42", name: "Captain Nova", image: null, verified: true },
+    ceoTokenId: "42", ceo: { tokenId: "42", name: "Captain Nova", image: null, verified: true, archetype: "TACTICIAN" },
     ownerWallets: ["0xdemo"], credits, gamesMade: 0, gamesPublished: 0
   };
   const productions = new Map();

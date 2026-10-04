@@ -106,7 +106,7 @@ async function readInftMeta(tokenId) {
 
 const arenaView = (a, onchain) => ({
   tokenId: String(a.tokenId), name: String(a.name).slice(0, 60), image: null,
-  agentId: a.agentId, clan: a.clan, evolutionStage: a.evolutionStage, elo: a.elo, owner: onchain ?? null, wallet: a.wallet
+  agentId: a.agentId, clan: a.clan, archetype: a.archetype ?? null, evolutionStage: a.evolutionStage, elo: a.elo, owner: onchain ?? null, wallet: a.wallet
 });
 const mask = (w) => `${w.slice(0, 6)}…${w.slice(-4)}`;
 

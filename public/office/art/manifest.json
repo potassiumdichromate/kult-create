@@ -409,5 +409,145 @@
       ]
     }
   },
-  "rev": "0f2fd01c3d"
+  "ceo": {
+    "berserker": {
+      "file": "ceo-berserker.png",
+      "frame": [
+        76,
+        112
+      ],
+      "scale": 0.5,
+      "anchor": [
+        38,
+        111
+      ],
+      "walkFaces": "right",
+      "poses": [
+        "idle",
+        "glance",
+        "walk1",
+        "walk2",
+        "walk3",
+        "walk4",
+        "walk5"
+      ],
+      "portrait": "ceo-berserker-portrait.png"
+    },
+    "tactician": {
+      "file": "ceo-tactician.png",
+      "frame": [
+        82,
+        112
+      ],
+      "scale": 0.5,
+      "anchor": [
+        41,
+        111
+      ],
+      "walkFaces": "right",
+      "poses": [
+        "idle",
+        "glance",
+        "walk1",
+        "walk2",
+        "walk3",
+        "walk4",
+        "walk5"
+      ],
+      "portrait": "ceo-tactician-portrait.png"
+    },
+    "defender": {
+      "file": "ceo-defender.png",
+      "frame": [
+        76,
+        112
+      ],
+      "scale": 0.5,
+      "anchor": [
+        38,
+        111
+      ],
+      "walkFaces": "right",
+      "poses": [
+        "idle",
+        "glance",
+        "walk1",
+        "walk2",
+        "walk3",
+        "walk4",
+        "walk5"
+      ],
+      "portrait": "ceo-defender-portrait.png"
+    },
+    "assassin": {
+      "file": "ceo-assassin.png",
+      "frame": [
+        69,
+        112
+      ],
+      "scale": 0.5,
+      "anchor": [
+        34.5,
+        111
+      ],
+      "walkFaces": "right",
+      "poses": [
+        "idle",
+        "glance",
+        "walk1",
+        "walk2",
+        "walk3",
+        "walk4",
+        "walk5"
+      ],
+      "portrait": "ceo-assassin-portrait.png"
+    },
+    "support": {
+      "file": "ceo-support.png",
+      "frame": [
+        82,
+        112
+      ],
+      "scale": 0.5,
+      "anchor": [
+        41,
+        111
+      ],
+      "walkFaces": "right",
+      "poses": [
+        "idle",
+        "glance",
+        "walk1",
+        "walk2",
+        "walk3",
+        "walk4",
+        "walk5"
+      ],
+      "portrait": "ceo-support-portrait.png"
+    },
+    "hybrid": {
+      "file": "ceo-hybrid.png",
+      "frame": [
+        80,
+        112
+      ],
+      "scale": 0.5,
+      "anchor": [
+        40,
+        111
+      ],
+      "walkFaces": "right",
+      "poses": [
+        "idle",
+        "glance",
+        "walk1",
+        "walk2",
+        "walk3",
+        "walk4",
+        "walk5"
+      ],
+      "portrait": "ceo-hybrid-portrait.png"
+    }
+  },
+  "rev": "b2eee283d9"
 }

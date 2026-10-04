@@ -65,6 +65,8 @@ export class Office {
   // ---------------------------------------------------------------- staff
   setStaff(employees, ceo) {
     this.people.clear();
+    // The CEO is the player's agent: its look comes from its AI Arena archetype.
+    this.ceoArchetype = String(ceo?.archetype || "hybrid").toLowerCase();
     for (const e of employees) {
       const h = hash(e.id + (e.name || ""));
       const isCeo = e.id === "ceo";
@@ -527,13 +529,13 @@ export class Office {
   // scripts/import-art.mjs). The background's measured floor corners give the
   // grid projection, so desks, people and effects land on the painted room.
   // Anything without a sprite (e.g. the CEO until delivered) is drawn as before.
-  useArt(manifest, images) {
+  useArt(manifest, images, urlOf = (f) => `art/${f}`) {
     const bg = manifest.background;
     if (!bg || !images[bg.file]) return false;
     const pr = bg.projection;
     iso = (gx, gy, z = 0) => [pr.origin[0] + gx * pr.ex[0] + gy * pr.ey[0], pr.origin[1] + gx * pr.ex[1] + gy * pr.ey[1] - z * pr.zScale];
     const first = !this.art;
-    this.art = { manifest, images, bg, img: images[bg.file] };
+    this.art = { manifest, images, bg, img: images[bg.file], urlOf, loading: new Set() };
     CEO_HOME = this.gridAt(bg.rugCenter);
     if (first) {
       // Keep the desk rows off the CEO rug in the painted room.
@@ -621,7 +623,10 @@ export class Office {
     this.paintScreen();
     this.drawInQuad(g, this.screenCanvas, A.bg.screen, true);
     if (A.bg.neon) { this.paintNeon(); this.drawInQuad(g, this.neonCanvas, this.insetQuad(A.bg.neon, 0.07, 0.1), true); }
-    if (this.portrait?.complete && this.portrait.naturalWidth) this.drawInQuad(g, this.portrait, A.bg.portrait);
+    // The CEO's portrait: the agent's own image if it has one, else its archetype art.
+    const ceoPortrait = this.ceoArt()?.m.portrait && A.images[this.ceoArt().m.portrait];
+    const portrait = this.portrait?.complete && this.portrait.naturalWidth ? this.portrait : ceoPortrait;
+    if (portrait) this.drawInQuad(g, portrait, A.bg.portrait, true);
     this.notes.forEach((n, i) => {
       const col = i % 6, row = Math.floor(i / 6), u = 0.06 + col * 0.155, v = 0.1 + row * 0.22;
       this.poly(g, [this.quadPoint(A.bg.whiteboard, u, v), this.quadPoint(A.bg.whiteboard, u + 0.12, v), this.quadPoint(A.bg.whiteboard, u + 0.12, v + 0.17), this.quadPoint(A.bg.whiteboard, u, v + 0.17)], n.color);
@@ -672,7 +677,48 @@ export class Office {
     return 0;
   }
 
+  // Only the studio's own archetype is downloaded, the first time it's needed.
+  ceoArt() {
+    const m = this.art?.manifest.ceo?.[this.ceoArchetype] || this.art?.manifest.ceo?.hybrid;
+    if (!m) return null;
+    for (const f of [m.file, m.portrait]) {
+      if (!f || this.art.images[f] || this.art.loading.has(f)) continue;
+      this.art.loading.add(f);
+      const img = new Image();
+      img.onload = () => { this.art.images[f] = img; };
+      img.src = this.art.urlOf(f);
+    }
+    const img = this.art.images[m.file];
+    return img ? { m, img } : null;
+  }
+
+  // The CEO sprite (stored at 2x, drawn at half size): idle with breathing,
+  // a glance now and then, a walk cycle, and a hop when the team ships.
+  artCeo(g, p, { m, img }) {
+    const [fx, fy] = iso(p.x, p.y), s = m.scale || 1;
+    const [fw, fh] = m.frame, walkFrames = m.poses.length - 2;
+    let frame = 0;
+    if (p.walking) frame = 2 + (Math.floor(this.t * 10) % walkFrames);
+    else {
+      p.fidgetAt ??= this.t + 3 + ((p.phase * 5) % 4);
+      if (this.t > p.fidgetAt + 1.4) p.fidgetAt = this.t + 5 + Math.random() * 7;
+      if (this.t > p.fidgetAt) frame = 1;
+    }
+    const hop = p.state === "done" && this.t - p.stateAt < 1.4 ? Math.floor((this.t - p.stateAt) * 7) % 2 * 2 : 0;
+    const breath = !p.walking && Math.sin(this.t * 1.7 + p.phase) > 0.2 ? 0.5 : 0;
+    const w = fw * s, h = fh * s, x = Math.round(fx - w / 2), y = Math.round(fy - h + 1 - hop);
+    g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(fx, fy, w * 0.32, 3, 0, 0, Math.PI * 2); g.fill();
+    g.save();
+    const facesRight = m.walkFaces === "right";
+    if (p.walking && (facesRight ? p.facing < 0 : p.facing > 0)) { g.translate(Math.round(fx) * 2, 0); g.scale(-1, 1); }
+    g.imageSmoothingEnabled = false;
+    g.drawImage(img, frame * fw, 0, fw, fh, x, y, w, h);
+    if (breath) { const split = Math.round(fh * 0.55); g.drawImage(img, frame * fw, 0, fw, split, x, y - breath, w, split * s); }
+    g.restore();
+  }
+
   artPerson(g, p) {
+    if (p.isCeo) { const ceo = this.ceoArt(); if (ceo) { this.artCeo(g, p, ceo); return; } }
     const c = this.art.manifest.characters?.[p.id], img = c && this.art.images[c.file];
     const [fx, fy] = iso(p.x, p.y);
     if (!img) { // no sprite yet: the drawn character, scaled to the art
@@ -698,8 +744,9 @@ export class Office {
   }
 
   artAnchor(p) {
-    const c = this.art.manifest.characters?.[p.id];
     const [fx, fy] = iso(p.x, p.y);
+    if (p.isCeo && this.ceoArt()) { const { m } = this.ceoArt(); return [fx, fy - m.frame[1] * (m.scale || 1) - 2]; }
+    const c = this.art.manifest.characters?.[p.id];
     return c ? [fx, fy - c.frame[1] - 2] : [fx, fy - 58];
   }
 
@@ -707,7 +754,7 @@ export class Office {
     let best = null;
     for (const p of this.people.values()) {
       const c = this.art.manifest.characters?.[p.id], [fx, fy] = iso(p.x, p.y);
-      const w = c ? c.frame[0] * 0.7 : 24, h = c ? c.frame[1] : 56;
+      const w = c ? c.frame[0] * 0.7 : 24, h = c ? c.frame[1] : 56; // the CEO is ~56 tall either way
       if (x >= fx - w / 2 && x <= fx + w / 2 && y >= fy - h && y <= fy) if (!best || p.y > best.y) best = p;
     }
     return best;

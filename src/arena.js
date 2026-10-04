@@ -25,11 +25,11 @@ function db() {
 }
 
 const AGENT_COLUMNS = `
-  a.id, a.name, a.clan::text AS clan, a."evolutionStage"::text AS "evolutionStage", a."eloRating", a.wins, a.losses,
+  a.id, a.name, a.clan::text AS clan, a.archetype::text AS archetype, a."evolutionStage"::text AS "evolutionStage", a."eloRating", a.wins, a.losses,
   a."inftTokenId", lower(u."walletAddress") AS wallet`;
 
 const toAgent = (r) => ({
-  agentId: r.id, name: r.name, clan: r.clan, evolutionStage: r.evolutionStage,
+  agentId: r.id, name: r.name, clan: r.clan, archetype: r.archetype ?? null, evolutionStage: r.evolutionStage,
   elo: r.eloRating, wins: r.wins, losses: r.losses, tokenId: r.inftTokenId, wallet: r.wallet
 });
 

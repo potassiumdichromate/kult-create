@@ -137,6 +137,7 @@ async function loadArt() {
     if (!res.ok) return;
     const manifest = await res.json();
     const groups = [manifest.background ? [manifest.background] : [], Object.values(manifest.sprites || {}), Object.values(manifest.characters || {}), Object.values(manifest.icons || {})];
+    // CEO art (one sheet per archetype) is fetched on demand by the office.
     const files = [...new Set(groups.flat().map((x) => x.file).filter(Boolean))];
     // Versioned URLs: a new art import changes rev, so no cache serves old art.
     const artUrl = (file) => `art/${file}${manifest.rev ? `?v=${manifest.rev}` : ""}`;
@@ -147,7 +148,7 @@ async function loadArt() {
       img.onerror = resolve;
       img.src = artUrl(file);
     })));
-    if (!office.useArt(manifest, images)) return;
+    if (!office.useArt(manifest, images, artUrl)) return;
     document.body.classList.add("has-art");
     // Sidebar and HUD icons from the art.
     const icon = (name) => manifest.icons?.[name] && images[manifest.icons[name].file] ? artUrl(manifest.icons[name].file) : null;
@@ -492,7 +493,9 @@ async function enterOffice(agency, fresh = false) {
   $("ceo-badge").textContent = `CEO ${agency.ceo?.name || `#${agency.ceoTokenId}`}`;
   setCredits(agency.credits);
   $("credits").textContent = agency.credits.toLocaleString();
-  office.setStaff(state.cfg.employees, agency.ceo);
+  // ?archetype=berserker previews another CEO look (demo / design checks).
+  const preview = params.get("archetype");
+  office.setStaff(state.cfg.employees, preview ? { ...agency.ceo, archetype: preview } : agency.ceo);
   if (agency.ceo?.image) { const img = new Image(); img.crossOrigin = "anonymous"; img.src = agency.ceo.image; office.portrait = img; }
   office.lightsOn = true;
   office.screen = { mode: "idle", title: agency.name, progress: 0, image: null, lines: [] };
