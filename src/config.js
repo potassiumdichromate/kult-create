@@ -77,11 +77,12 @@ export const config = {
   privy: {
     appId: env("PRIVY_APP_ID", ""),
     verificationKey: "",
-    appSecret: env("PRIVY_APP_SECRET", "")
+    appSecret: env("PRIVY_APP_SECRET", ""),
+    clientId: env("PRIVY_CLIENT_ID", "")
   },
 
   // AI Arena's Postgres (read-only): which player owns which agent.
-  arena: { databaseUrl: env("AI_ARENA_DATABASE_URL", "") },
+  arena: { databaseUrl: env("AI_ARENA_DATABASE_URL", ""), appUrl: env("AI_ARENA_APP_URL", "https://app.kult.games") },
 
   // Services this building uses.
   computeLayer: { url: env("COMPUTE_LAYER_URL", "http://localhost:4100").replace(/\/$/, ""), key: env("COMPUTE_LAYER_KEY", "") },

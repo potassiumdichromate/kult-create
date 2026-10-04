@@ -26,7 +26,7 @@ const show = (id, on = true) => { $(id).hidden = !on; };
 
 const state = {
   cfg: null, agency: null, staff: new Map(), current: null, unsubscribe: null,
-  seen: new Set(), done: new Set(), expected: 20, ceoPick: null, okxOk: false, productions: []
+  seen: new Set(), done: new Set(), expected: 20, ceoPick: null, wallets: [], productions: []
 };
 
 // ------------------------------------------------------------------ office canvas
@@ -132,11 +132,12 @@ async function boot() {
   $("cost-pro").textContent = credits.pro;
   $("cost-ultra").textContent = credits.ultra;
   $("cost-edit").textContent = credits.edit;
+  $("no-agent-create").href = state.cfg.aiArenaUrl || "https://app.kult.games";
   for (const e of employees) state.staff.set(e.id, e);
   office.setStaff(employees, null);
   if (embedded) show("exit");
   // Inside Kult World the player is already signed in with Privy: ask the
-  // parent page for that session instead of a wallet signature.
+  // parent page for that session.
   if (privyBridge()) {
     $("connect").textContent = "Sign in with Kult World";
     const session = await requestParentSession(3000);
@@ -145,10 +146,43 @@ async function boot() {
   if (api.hasSession()) {
     try {
       const me = await api.me();
-      if (me.agency) return enterOffice(me.agency);
-      return showRegister(me.wallets);
+      return afterSignIn({ wallets: me.wallets, hasAgency: Boolean(me.agency), agency: me.agency });
     } catch { api.signOut(); }
   }
+  // Opened directly: the same Privy login as Creator Studio. A player who is
+  // still signed in to Privy walks straight in.
+  const privy = await loadPrivy();
+  if (privy?.authenticated) {
+    const session = await privy.tokens().catch(() => null);
+    if (session) return privySignIn(session);
+  }
+  show("entrance");
+}
+
+// ------------------------------------------------------------------ Privy (standalone)
+// The Privy React SDK lives in a small separate bundle (privy-login/ → ./privy/),
+// configured exactly like Creator Studio's. Without it, the office falls back
+// to a plain wallet signature.
+let privyApi = null;
+async function loadPrivy() {
+  if (privyApi !== null) return privyApi || null;
+  privyApi = false;
+  if (api.demo || embedded || !state.cfg?.privy || !state.cfg?.privyAppId) return null;
+  try {
+    const mod = await import("./privy/kult-privy.js");
+    privyApi = await mod.init({ appId: state.cfg.privyAppId, clientId: state.cfg.privyClientId || undefined });
+  } catch (e) {
+    console.warn("[kult-create] Privy login unavailable, using wallet signature", e);
+    privyApi = false;
+  }
+  return privyApi || null;
+}
+
+async function signOutEverywhere() {
+  api.signOut();
+  state.agency = null;
+  try { await privyApi?.logout?.(); } catch { /* already signed out */ }
+  for (const id of ["register", "no-agent", "okx-link", "okx-guide"]) show(id, false);
   show("entrance");
 }
 
@@ -190,15 +224,40 @@ window.addEventListener("message", (e) => {
 async function privySignIn(session) {
   show("entrance-error", false);
   try {
-    const out = await api.privySignIn(session);
-    if (out.hasAgency) { const me = await api.me(); return enterOffice(me.agency); }
-    return showRegister(out.wallets);
+    return await afterSignIn(await api.privySignIn(session));
   } catch (e) {
     show("entrance");
     $("entrance-error").textContent = e.message;
     show("entrance-error");
   }
 }
+
+// Signed in: walk into the studio, or register one if this account has a
+// KULT agent to be its CEO.
+async function afterSignIn({ wallets, hasAgency, agency }) {
+  if (hasAgency) return enterOffice(agency || (await api.me()).agency);
+  state.wallets = wallets;
+  show("entrance", false);
+  let out = { candidates: [] };
+  try { out = await api.candidates(); } catch { /* treated as none */ }
+  const free = out.candidates.filter((c) => !c.taken);
+  if (!free.length) return showNoAgent(wallets, out.candidates.length > 0);
+  return showRegister(wallets, out.candidates);
+}
+
+function showNoAgent(wallets, allTaken) {
+  show("register", false);
+  $("no-agent-wallets").textContent = wallets.map(short).join(", ");
+  show("no-agent");
+  if (allTaken) toast("Your agent already runs a studio. Sign in with the account that owns it.", true);
+}
+
+$("no-agent-retry").addEventListener("click", async (ev) => {
+  const btn = ev.currentTarget;
+  busy(btn, true, "Checking…");
+  try { show("no-agent", false); await afterSignIn({ wallets: state.wallets || [], hasAgency: false }); }
+  finally { busy(btn, false); }
+});
 
 $("connect").addEventListener("click", async (ev) => {
   const btn = ev.currentTarget;
@@ -215,56 +274,61 @@ $("connect").addEventListener("click", async (ev) => {
     if (session) await privySignIn(session);
     return;
   }
+  const privy = await loadPrivy();
+  if (privy) {
+    busy(btn, true, "Signing in…");
+    try {
+      await privy.login();
+      await privySignIn(await privy.tokens());
+    } catch (e) {
+      if (!/closed|exited|cancel/i.test(String(e?.message || e))) {
+        $("entrance-error").textContent = e?.message || "Sign-in failed";
+        show("entrance-error");
+      }
+    } finally { busy(btn, false); }
+    return;
+  }
   busy(btn, true, "Check your wallet…");
   try {
-    const out = await api.signIn();
-    if (out.hasAgency) { const me = await api.me(); enterOffice(me.agency); }
-    else showRegister(out.wallets);
+    await afterSignIn(await api.signIn());
   } catch (e) {
     $("entrance-error").textContent = e.message;
     show("entrance-error");
   } finally { busy(btn, false); }
 });
 
-async function showRegister(wallets) {
-  show("entrance", false);
+// ------------------------------------------------------------------ registration
+function showRegister(wallets, candidates) {
+  show("no-agent", false);
   show("register");
   $("reg-wallets").textContent = wallets.map(short).join(", ");
-  loadCandidates();
-}
-
-async function loadCandidates() {
   const list = $("ceo-list");
-  list.replaceChildren(el("p", { class: "muted small" }, "Looking for your agents on 0G…"));
-  let out = { candidates: [] };
-  try { out = await api.candidates(); } catch { /* fall through to manual */ }
   list.replaceChildren();
-  state.ceoPick = null;
-  for (const c of out.candidates) {
-    const btn = el("button", { type: "button", class: "ceo-pick", "aria-pressed": "false", disabled: c.taken || null, onclick: () => {
+  const free = candidates.filter((c) => !c.taken);
+  state.ceoPick = free[0];
+  const describe = (c) => [c.clan, c.elo ? `ELO ${c.elo}` : null, `INFT #${c.tokenId}`].filter(Boolean).join(" · ");
+  if (candidates.length === 1) {
+    list.append(el("div", { class: "ceo-card" }, el("span", { class: "crown", "aria-hidden": "true" }, "♛"),
+      el("div", {}, el("b", {}, free[0].name), el("br"), el("span", { class: "muted small" }, describe(free[0])))));
+    return;
+  }
+  for (const c of candidates) {
+    const btn = el("button", { type: "button", class: "ceo-pick", "aria-pressed": c === state.ceoPick ? "true" : "false", disabled: c.taken || null, onclick: () => {
       for (const b of list.children) b.setAttribute("aria-pressed", "false");
       btn.setAttribute("aria-pressed", "true");
       state.ceoPick = c;
     } },
     c.image ? el("img", { src: c.image, alt: "" }) : el("span", { class: "ph" }),
-    el("b", {}, c.name), el("span", { class: "muted small" }, c.taken ? "Already a CEO" : [c.clan, c.elo ? `ELO ${c.elo}` : null, `#${c.tokenId}`].filter(Boolean).join(" · ")));
+    el("b", {}, c.name), el("span", { class: "muted small" }, c.taken ? "Already runs a studio" : describe(c)));
     list.append(btn);
   }
-  if (!out.candidates.length) {
-    list.append(el("p", { class: "muted small" }, out.verify === "arena"
-      ? "No AI Arena agent found for your wallet. Sign in with (or link) the wallet you log in to AI Arena with."
-      : out.verify === "off" || out.verify === "custodial"
-      ? "Enter your AI Arena agent's INFT token ID and name."
-      : "No KULT agents found in your signed-in wallets. Link the wallet that holds your agent, or enter its token ID."));
-    show("ceo-manual");
-  } else show("ceo-manual", false);
 }
 
-async function lookupOkx() {
-  const id = $("reg-okx").value.trim();
-  const card = $("okx-card");
-  state.okxOk = false;
-  if (!id) { card.hidden = true; return; }
+// OKX.ai identity lookup, shared by registration and "link later".
+async function lookupOkx(inputId, cardId) {
+  const id = $(inputId).value.trim();
+  const card = $(cardId);
+  if (!id) { card.hidden = true; return null; }
   card.className = "idcard";
   card.replaceChildren(el("span", { class: "muted" }, "Reading X Layer…"));
   card.hidden = false;
@@ -272,66 +336,110 @@ async function lookupOkx() {
     const me = await api.me();
     const info = await api.okx(id);
     const mine = me.wallets.includes(info.owner) || (info.agentWallet && me.wallets.includes(info.agentWallet));
-    state.okxOk = mine && !info.taken;
-    card.className = `idcard ${state.okxOk ? "good" : "bad"}`;
+    const ok = mine && !info.taken;
+    card.className = `idcard ${ok ? "good" : "bad"}`;
     card.replaceChildren(
       info.image ? el("img", { src: info.image, alt: "" }) : el("span", { class: "ph" }),
       el("div", {},
         el("b", {}, info.name), el("br"),
         el("span", { class: "small muted" }, `Agent #${info.agentId} · owner ${short(info.owner)}`), el("br"),
-        info.taken ? el("span", { class: "small error" }, "This identity already has a studio.")
+        info.taken ? el("span", { class: "small error" }, "This identity already belongs to a studio.")
           : mine ? el("span", { class: "small", style: "color:var(--green)" }, "✓ You control this identity")
-            : el("span", { class: "small error" }, "Owned by another wallet. ", el("button", { type: "button", class: "linkish", onclick: linkWallet }, "Link that wallet"))));
+            : el("span", { class: "small error" }, "Owned by another wallet. ", el("button", { type: "button", class: "linkish", onclick: () => linkWallet(inputId, cardId) }, "Link that wallet"))));
+    return ok ? info : null;
   } catch (e) {
     card.className = "idcard bad";
     card.replaceChildren(el("span", { class: "error" }, e.message));
+    return null;
   }
 }
-$("okx-lookup").addEventListener("click", lookupOkx);
-$("reg-okx").addEventListener("change", lookupOkx);
+$("okx-lookup").addEventListener("click", () => lookupOkx("reg-okx", "okx-card"));
+$("reg-okx").addEventListener("change", () => lookupOkx("reg-okx", "okx-card"));
 
-async function linkWallet() {
+// The OKX identity may sit in a wallet that is not on the Privy account:
+// prove that wallet with a signature (OKX Wallet / MetaMask).
+async function linkWallet(inputId, cardId) {
   try {
-    toast("Switch to the other wallet account, then sign.");
+    toast("Switch your wallet to the account that owns the identity, then sign.");
     const out = await api.linkWallet();
     $("reg-wallets").textContent = out.wallets.map(short).join(", ");
     toast("Wallet linked.");
-    loadCandidates();
-    if ($("reg-okx").value.trim()) lookupOkx();
+    if ($(inputId).value.trim()) lookupOkx(inputId, cardId);
   } catch (e) { toast(e.message, true); }
 }
-$("link-wallet").addEventListener("click", linkWallet);
-$("sign-out").addEventListener("click", () => { api.signOut(); show("register", false); show("entrance"); });
+
+for (const b of document.querySelectorAll(".sign-out")) b.addEventListener("click", signOutEverywhere);
+for (const b of document.querySelectorAll(".okx-guide-open")) b.addEventListener("click", () => show("okx-guide"));
+for (const b of document.querySelectorAll("[data-close]")) b.addEventListener("click", () => show(b.dataset.close, false));
+for (const b of document.querySelectorAll("[data-copy]")) {
+  b.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(b.previousElementSibling.textContent); b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy"; }, 1500); }
+    catch { toast("Copy failed. Select the text and copy it manually.", true); }
+  });
+}
 
 $("register-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const err = $("register-error");
   err.hidden = true;
-  const ceoTokenId = state.ceoPick?.tokenId ?? $("reg-ceo").value.trim();
-  if (!ceoTokenId) { err.textContent = "Choose your CEO agent."; err.hidden = false; return; }
   const btn = $("register-btn");
   busy(btn, true, "Opening…");
   try {
+    const okxAgentId = $("reg-okx").value.trim() || undefined;
     const { agency } = await api.register({
       name: $("reg-name").value.trim(), tagline: $("reg-tagline").value.trim(),
-      okxAgentId: $("reg-okx").value.trim(), ceoTokenId, ceoName: state.ceoPick?.name ?? ($("reg-ceo-name").value.trim() || undefined)
+      ...(okxAgentId ? { okxAgentId } : {}),
+      ...(state.ceoPick ? { ceoTokenId: state.ceoPick.tokenId } : {})
     });
     show("register", false);
     enterOffice(agency, true);
   } catch (e) {
+    if (e.data?.code === "NO_AGENT") { showNoAgent(state.wallets || [], false); return; }
     err.textContent = e.message;
     err.hidden = false;
+  } finally { busy(btn, false); }
+});
+
+// ------------------------------------------------------------------ OKX identity (link later)
+function renderOkxBadge(agency) {
+  const badge = $("okx-badge");
+  if (agency.okxAgentId) {
+    badge.className = "badge";
+    badge.replaceChildren(agency.okx?.verified ? el("span", { class: "ok" }, "✓ ") : "", `OKX.ai #${agency.okxAgentId}`);
+    badge.onclick = null;
+  } else {
+    badge.className = "badge add";
+    badge.textContent = "+ Link OKX.ai";
+    badge.title = "Optional: use your studio commercially on OKX.ai";
+    badge.onclick = () => { show("okx-link-error", false); show("okx-link"); $("okx-link-id").focus(); };
+  }
+}
+$("okx-link-check").addEventListener("click", () => lookupOkx("okx-link-id", "okx-link-card"));
+$("okx-link-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const btn = $("okx-link-btn");
+  busy(btn, true, "Linking…");
+  try {
+    const { agency } = await api.linkOkx($("okx-link-id").value.trim());
+    state.agency = { ...state.agency, ...agency };
+    renderOkxBadge(state.agency);
+    show("okx-link", false);
+    logSystem(`Linked OKX.ai identity #${agency.okxAgentId}. Your studio is now discoverable on OKX.ai.`);
+    say("ceo", "We're on OKX.ai now. Let's take on some commercial work!");
+  } catch (e) {
+    $("okx-link-error").textContent = e.message;
+    show("okx-link-error");
   } finally { busy(btn, false); }
 });
 
 // ------------------------------------------------------------------ office
 async function enterOffice(agency, fresh = false) {
   state.agency = agency;
-  show("entrance", false); show("register", false);
+  for (const id of ["entrance", "register", "no-agent"]) show(id, false);
   show("hud"); show("console"); show("feed");
   $("studio-name").textContent = agency.name;
   $("studio-tagline").textContent = agency.tagline || "";
-  $("okx-badge").replaceChildren(agency.okx?.verified ? el("span", { class: "ok" }, "✓ ") : "", `OKX.ai #${agency.okxAgentId}`);
+  renderOkxBadge(agency);
   $("ceo-badge").textContent = `CEO ${agency.ceo?.name || `#${agency.ceoTokenId}`}`;
   setCredits(agency.credits);
   $("credits").textContent = agency.credits.toLocaleString();

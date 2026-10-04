@@ -13,10 +13,13 @@ import { verifyPrivy, privyConfigured } from "./privy.js";
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(40),
   tagline: z.string().trim().max(120).optional().default(""),
-  okxAgentId: z.union([z.string(), z.number()]).transform(String),
-  ceoTokenId: z.union([z.string(), z.number()]).transform(String),
+  // Optional: only for studios that want commercial use on OKX.ai.
+  okxAgentId: z.union([z.string(), z.number()]).transform((v) => String(v).trim()).optional().transform((v) => v || undefined),
+  // Optional: defaults to the player's own AI Arena agent.
+  ceoTokenId: z.union([z.string(), z.number()]).transform(String).optional(),
   ceoName: z.string().trim().max(60).optional()
 });
+const okxLinkSchema = z.object({ okxAgentId: z.union([z.string(), z.number()]).transform((v) => String(v).trim()) });
 const productionSchema = z.object({
   brief: z.string().trim().min(8, "Describe the game in a sentence or two").max(2000),
   mode: z.enum(["pro", "ultra"])
@@ -64,6 +67,12 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     req.agency = agency;
     next();
   });
+  const okxRecord = (okx) => ({ name: okx.name, image: okx.image, description: okx.description, owner: okx.owner, agentWallet: okx.agentWallet, verified: okx.verified });
+  const verifiedOkx = async (agentId, wallets) => {
+    const okx = await chain.verifyOkxControl(agentId, wallets);
+    if (await store.findOne("agencies", { okxAgentId: okx.agentId })) throw Object.assign(new Error(`OKX.ai agent #${okx.agentId} already has a studio`), { status: 409 });
+    return okx;
+  };
   const ownProduction = wrap(async (req, res, next) => {
     const p = await store.findOne("productions", { id: req.params.id });
     if (!p || p.agencyId !== req.agency.id) { res.status(404).json({ error: "Production not found" }); return; }
@@ -87,6 +96,9 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     employees: EMPLOYEES,
     okx: { chainId: 196, registry: config.okx.registry, verify: config.okx.verify },
     privy: privyConfigured(),
+    privyAppId: config.privy.appId || null,
+    privyClientId: config.privy.clientId || null,
+    aiArenaUrl: config.arena.appUrl,
     embedOrigins: config.allowedOrigins,
     ceo: { chainId: 16661, contract: config.inft.contract, verify: config.inft.mode }
   }));
@@ -151,17 +163,24 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
   app.post("/agency", requireAuth, wrap(async (req, res) => {
     const body = registerSchema.parse(req.body);
     if (await agencyFor(req.session.wallets)) throw Object.assign(new Error("You already run a studio"), { status: 409 });
-    const okx = await chain.verifyOkxControl(body.okxAgentId, req.session.wallets);
-    if (await store.findOne("agencies", { okxAgentId: okx.agentId })) throw Object.assign(new Error(`OKX.ai agent #${okx.agentId} already has a studio`), { status: 409 });
-    const ceo = await chain.verifyCeo(body.ceoTokenId, req.session.wallets, body.ceoName);
+    // CEO: the player's own KULT agent. Without an explicit choice, the first
+    // agent of theirs that does not already run a studio.
+    let ceoTokenId = body.ceoTokenId;
+    if (!ceoTokenId) {
+      for (const c of await chain.ceoCandidates(req.session.wallets)) {
+        if (!(await store.findOne("agencies", { ceoTokenId: c.tokenId }))) { ceoTokenId = c.tokenId; break; }
+      }
+      if (!ceoTokenId) throw Object.assign(new Error("You need a KULT agent to run a studio. Create one in AI Arena first."), { status: 409, code: "NO_AGENT" });
+    }
+    const ceo = await chain.verifyCeo(ceoTokenId, req.session.wallets, body.ceoName);
+    const okx = body.okxAgentId ? await verifiedOkx(body.okxAgentId, req.session.wallets) : null;
     if (await store.findOne("agencies", { ceoTokenId: ceo.tokenId })) throw Object.assign(new Error(`Agent #${ceo.tokenId} is already CEO of another studio`), { status: 409 });
     const agency = {
       id: `agy_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
       name: body.name, tagline: body.tagline,
-      okxAgentId: okx.agentId,
-      okx: { name: okx.name, image: okx.image, description: okx.description, owner: okx.owner, agentWallet: okx.agentWallet, verified: okx.verified },
+      ...(okx ? { okxAgentId: okx.agentId, okx: okxRecord(okx) } : { okx: null }),
       ceoTokenId: ceo.tokenId,
-      ceo: { tokenId: ceo.tokenId, name: ceo.name, image: ceo.image, verified: ceo.verified },
+      ceo: { tokenId: ceo.tokenId, name: ceo.name, image: ceo.image, verified: ceo.verified, agentId: ceo.agentId ?? null, clan: ceo.clan ?? null, elo: ceo.elo ?? null, wallet: ceo.wallet ?? ceo.user ?? null },
       ownerWallets: req.session.wallets,
       credits: config.credits.starting,
       gamesMade: 0, gamesPublished: 0,
@@ -170,6 +189,15 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     await store.insert("agencies", agency);
     await store.insert("ledger", { id: randomUUID(), agencyId: agency.id, delta: config.credits.starting, reason: "Studio grant", ref: null, at: Date.now() });
     res.status(201).json({ agency });
+  }));
+
+  // Link an OKX.ai identity later (commercial use: discoverable on OKX.ai).
+  app.post("/agency/okx", requireAuth, needAgency, wrap(async (req, res) => {
+    const { okxAgentId } = okxLinkSchema.parse(req.body);
+    if (req.agency.okxAgentId) throw Object.assign(new Error(`This studio is already linked to OKX.ai agent #${req.agency.okxAgentId}`), { status: 409 });
+    const okx = await verifiedOkx(okxAgentId, req.session.wallets);
+    const agency = await store.update("agencies", req.agency.id, { okxAgentId: okx.agentId, okx: okxRecord(okx) });
+    res.json({ agency });
   }));
 
   app.get("/agency", requireAuth, needAgency, wrap(async (req, res) => {
@@ -221,8 +249,8 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     const a = req.agency;
     const out = await studio.importRun({
       runId: p.runId,
-      creatorWallet: a.okx.owner && a.ownerWallets.includes(a.okx.owner) ? a.okx.owner : a.ownerWallets[0],
-      studio: { agencyId: a.id, name: a.name, okxAgentId: a.okxAgentId, ceoTokenId: a.ceoTokenId, ceoName: a.ceo.name },
+      creatorWallet: a.ceo?.wallet && a.ownerWallets.includes(a.ceo.wallet) ? a.ceo.wallet : a.ownerWallets[0],
+      studio: { agencyId: a.id, name: a.name, okxAgentId: a.okxAgentId ?? "", ceoTokenId: a.ceoTokenId, ceoName: a.ceo.name },
       publish,
       gameId: p.published?.gameId
     });
@@ -244,7 +272,7 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     if (error instanceof z.ZodError) { res.status(400).json({ error: error.issues.map((i) => i.message).join("; ") }); return; }
     const status = error.status || 500;
     if (status >= 500) console.error("[kult-create]", error);
-    res.status(status).json({ error: status >= 500 && !error.upstream && !error.expose ? "Something went wrong" : error.message, ...(error.ownerWallet ? { ownerWallet: error.ownerWallet } : {}) });
+    res.status(status).json({ error: status >= 500 && !error.upstream && !error.expose ? "Something went wrong" : error.message, ...(error.ownerWallet ? { ownerWallet: error.ownerWallet } : {}), ...(error.code && typeof error.code === "string" && /^[A-Z_]+$/.test(error.code) ? { code: error.code } : {}) });
   });
 
   return app;

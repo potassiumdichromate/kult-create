@@ -4,3 +4,5 @@ data
 .env.local
 *.log
 .DS_Store
+# built by npm run build (privy-login/)
+public/office/privy/

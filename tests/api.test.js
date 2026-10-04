@@ -225,3 +225,49 @@ test("employee mapping covers every pipeline step", () => {
   assert.match(doneLine({ id: "qa", status: "done" }, { report: { ok: true }, history: [1, 2] }).line, /after 1 fix/);
   assert.match(doneLine({ id: "code", status: "failed", error: "x" }, {}).line, /problem/);
 });
+
+test("a studio can open without an OKX identity; the CEO is the player's own agent", async () => {
+  const saved = fakeChain.ceoCandidates;
+  fakeChain.ceoCandidates = async () => [{ tokenId: "7", name: "Nova" }, { tokenId: "70", name: "Juno" }]; // #7 already runs a studio
+  const solo = Wallet.createRandom();
+  const s = await signIn(solo);
+  const r = await call("POST", "/agency", { name: "Solo Studio", tagline: "Just games" }, s.body.token);
+  fakeChain.ceoCandidates = saved;
+  assert.equal(r.status, 201);
+  assert.equal(r.body.agency.okx, null);
+  assert.equal(r.body.agency.okxAgentId, undefined);
+  assert.equal(r.body.agency.ceo.tokenId, "70"); // first of the player's agents not already running a studio
+  // A second studio without OKX does not collide on the missing identity...
+  const other = await signIn(Wallet.createRandom());
+  const second = await call("POST", "/agency", { name: "Other Studio", ceoTokenId: "8" }, other.body.token);
+  assert.equal(second.status, 201);
+  // ...and the same agent cannot run two studios.
+  const third = await signIn(Wallet.createRandom());
+  const dup = await call("POST", "/agency", { name: "Copycat", ceoTokenId: "70" }, third.body.token);
+  assert.equal(dup.status, 409);
+});
+
+test("the OKX identity can be linked later, once, by its owner", async () => {
+  const s = await signIn(owner);
+  const me = (await call("GET", "/agency", null, s.body.token)).body.agency;
+  assert.ok(me.okxAgentId); // registered with one earlier
+  const again = await call("POST", "/agency/okx", { okxAgentId: "3000" }, s.body.token);
+  assert.equal(again.status, 409);
+
+  const solo = await signIn(stranger);
+  const reg = await call("POST", "/agency", { name: "Stranger Studio", ceoTokenId: "9" }, solo.body.token);
+  assert.equal(reg.status, 201);
+  // fakeChain says every OKX identity belongs to `owner`, so the stranger cannot link one.
+  const steal = await call("POST", "/agency/okx", { okxAgentId: "3001" }, solo.body.token);
+  assert.equal(steal.status, 403);
+});
+
+test("no agent, no studio", async () => {
+  const saved = fakeChain.ceoCandidates;
+  fakeChain.ceoCandidates = async () => [];
+  const s = await signIn(Wallet.createRandom());
+  const r = await call("POST", "/agency", { name: "Agentless" }, s.body.token);
+  fakeChain.ceoCandidates = saved;
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "NO_AGENT");
+});

@@ -135,6 +135,7 @@ export function createDemoApi() {
     candidates: async () => ({ candidates: [] }),
     register: async () => ({ agency }),
     ledger: async () => ({ entries: [] }),
+    linkOkx: async (id) => { agency.okxAgentId = id; agency.okx = { name: `OKX.ai Agent #${id}`, verified: true }; return { agency: { ...agency } }; },
     start: async ({ brief, mode }) => make("build", brief, mode, mode === "ultra" ? 100 : 40, null),
     edit: async (id, request) => { const parent = productions.get(id); return make("edit", request, parent?.mode || "pro", 10, id); },
     production: async (id) => ({ production: { ...productions.get(id), events: undefined } }),

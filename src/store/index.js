@@ -68,9 +68,14 @@ class MongoStore {
   async init() {
     await this.client.connect();
     this.db = this.client.db(this.dbName);
+    // okxAgentId became optional: replace the old all-documents unique index
+    // with one that only covers studios that linked an OKX.ai identity.
+    const agencies = this.db.collection("agencies");
+    const old = (await agencies.indexes().catch(() => [])).find((i) => i.key?.okxAgentId === 1 && !i.partialFilterExpression);
+    if (old) await agencies.dropIndex(old.name);
+    await agencies.createIndex({ okxAgentId: 1 }, { unique: true, name: "okxAgentId_unique", partialFilterExpression: { okxAgentId: { $type: "string" } } });
     await Promise.all([
       this.db.collection("agencies").createIndex({ id: 1 }, { unique: true }),
-      this.db.collection("agencies").createIndex({ okxAgentId: 1 }, { unique: true }),
       this.db.collection("agencies").createIndex({ ceoTokenId: 1 }, { unique: true, sparse: true }),
       this.db.collection("agencies").createIndex({ ownerWallets: 1 }),
       this.db.collection("productions").createIndex({ id: 1 }, { unique: true }),

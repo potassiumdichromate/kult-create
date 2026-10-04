@@ -73,6 +73,7 @@ export const realApi = {
   candidates: () => request("GET", "/ceo/candidates"),
   register: (body) => request("POST", "/agency", body),
   agency: () => request("GET", "/agency"),
+  linkOkx: (okxAgentId) => request("POST", "/agency/okx", { okxAgentId }),
   ledger: () => request("GET", "/ledger"),
   start: (body) => request("POST", "/agency/productions", body),
   production: (id) => request("GET", `/agency/productions/${id}`),

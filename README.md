@@ -1,8 +1,8 @@
 # Kult Create
 
-The game-studio building in **Kult World**. Players register their indie
-studio as an **Agency** with their OKX.ai identity, their persistent 0G agent
-becomes the **CEO**, and the KULT compute layer's specialist agents work as
+The game-studio building in **Kult World**. Players sign in with their KULT
+Privy account, register their indie studio as an **Agency**, their own KULT
+agent (AI Arena INFT on 0G) becomes the **CEO**, and the KULT compute layer's specialist agents work as
 **employees** in an isometric pixel-art office. The CEO writes a brief, the
 team builds the game live, and the finished game can be published to Kult
 Creator Studio.
@@ -18,21 +18,28 @@ Kult World ──iframe──▶ /office/ (this service)
 
 ## How it works
 
-1. **Entrance.** You need a studio to go in. The player connects a wallet and
-   signs a one-time message (no gas, no transaction).
-2. **Register the Agency.**
-   - **OKX.ai identity**: an ERC-8004 agent ID on X Layer
-     (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`). The signed-in wallets must
-     include its owner or its agent wallet. One studio per identity.
-   - **CEO**: the player's KULT agent INFT on 0G mainnet. One studio per agent;
-     the CEO is never minted here.
-   - A second wallet can be linked (for example, the OKX Agentic Wallet holds
-     the identity and another wallet holds the INFT).
-3. **Credits.** Every studio starts with **1,000 credits**. A **Pro** game
+1. **Entrance.** You need a studio to go in. Players sign in with **Privy**,
+   configured like Creator Studio (Google, email or wallet; 0G Mainnet). Inside
+   Kult World the session is handed over automatically (see below).
+2. **Agent check.** After sign-in, the office looks up the player's KULT agent:
+   AI Arena's database binds it to their Privy wallet, and the 0G INFT contract
+   confirms the token. No agent: the player is sent to AI Arena to create one.
+3. **Register the Agency.**
+   - **Studio name** and **tagline**.
+   - **CEO**: their own agent, picked automatically. One studio per agent; the
+     CEO is never minted here.
+   - **OKX.ai identity (optional)**: only for studios used commercially.
+     Linking an ERC-8004 agent ID on X Layer
+     (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`) makes the studio
+     discoverable to OKX users and to agentic tasks on OKX's Onchain OS. The
+     signed-in wallets must include its owner or its agent wallet; one studio
+     per identity. It can be linked later from the office ("+ Link OKX.ai").
+     Players without one get a guide to registering it through Onchain OS.
+4. **Credits.** Every studio starts with **1,000 credits**. A **Pro** game
    costs **40** (compute tier 2), an **Ultra** game costs **100** (tier 3), and
    a change request costs **10**. Credits are debited atomically before the
    run starts and refunded automatically if the run fails or cannot start.
-4. **The office.** Each pipeline step is owned by an employee:
+5. **The office.** Each pipeline step is owned by an employee:
 
    | Employee | Steps |
    |---|---|
@@ -52,7 +59,7 @@ Kult World ──iframe──▶ /office/ (this service)
    office event, with lines written from each step's real output (for
    example "Design locked: 'Neon Space Rush', 6 characters and objects").
    Events are persisted, so reopening the office replays the timeline.
-5. **Publish.** The finished game plays in the office. **Publish** asks
+6. **Publish.** The finished game plays in the office. **Publish** asks
    Creator Studio to import the run (art copied to its storage, 0G provenance,
    the same publish steps as a normal game) under the studio's wallet.
 
@@ -135,7 +142,8 @@ The SSE route also accepts `?token=`.
 | GET | `/me` | wallets and agency |
 | GET | `/identity/okx/:agentId` | Agent Card from X Layer |
 | GET | `/ceo/candidates` | the signed-in wallets' KULT agent INFTs |
-| POST | `/agency` | `{ name, tagline?, okxAgentId, ceoTokenId, ceoName? }` |
+| POST | `/agency` | `{ name, tagline?, okxAgentId?, ceoTokenId? }` (CEO defaults to the player's own agent) |
+| POST | `/agency/okx` | `{ okxAgentId }`: link an OKX.ai identity later (once) |
 | GET | `/agency`, `/ledger` | studio, recent productions, credit history |
 | POST | `/agency/productions` | `{ brief, mode: "pro" \| "ultra" }` |
 | GET | `/agency/productions/:id` | production with its timeline |

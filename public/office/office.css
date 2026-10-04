@@ -162,3 +162,23 @@ legend { padding: 0; font-weight: 600; }
   .studio { flex-basis: 100%; }
   #hud { gap: 10px; }
 }
+
+/* ---------------------------------------------------------------- registration v2 */
+.label { font-weight: 600; }
+.okx-box { margin-top: 16px; border: 2px dashed var(--line); padding: 10px 12px; background: #120c28; }
+.okx-box summary { cursor: pointer; display: flex; align-items: center; gap: 8px; list-style: none; }
+.okx-box summary::-webkit-details-marker { display: none; }
+.okx-box summary::before { content: "▸"; color: var(--muted); }
+.okx-box[open] summary::before { content: "▾"; }
+.okx-box .row { margin: 8px 0; }
+.okx-box .tag { color: var(--blue); border-color: #1d4c66; }
+.okx-why { color: var(--muted); margin: 8px 0; }
+.okx-why b { color: var(--gold); }
+.ceo-card { display: flex; gap: 12px; align-items: center; padding: 10px; border: 2px solid #7a5f1c; background: var(--panel-2); margin-top: 6px; }
+.ceo-card .crown { width: 44px; height: 44px; display: grid; place-items: center; background: #0e0a20; color: var(--gold); font: 16px var(--display); flex: none; }
+.steps { padding-left: 20px; display: grid; gap: 12px; margin: 14px 0; }
+.copy { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.copy code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 8px; background: #0e0a20; border: 2px solid var(--line); font-size: 13px; }
+button.badge { cursor: default; font: inherit; font-size: 13px; color: inherit; }
+button.badge.add { cursor: pointer; border-style: dashed; color: var(--blue); }
+button.badge.add:hover { border-color: var(--blue); }
