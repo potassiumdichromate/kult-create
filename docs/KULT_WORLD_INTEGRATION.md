@@ -44,7 +44,7 @@ session**. Everything else lives in Kult Create.
 |---|---|---|---|
 | **Kult Create** | https://kult-create.onrender.com | `potassiumdichromate/kult-create` | Office UI (`/office/`), embed script (`/embed.js`), studios, credits, productions |
 | KULT compute layer | https://kult-compute-layer.onrender.com | `potassiumdichromate/0g-ComputeLayer` | Builds games with the multi-agent pipeline |
-| Creator Studio (backend) | https://creator-studio-pi5b.onrender.com | `potassiumdichromate/creator-studio` | Stores and publishes games; engagement numbers |
+| Creator Studio (backend) | https://creator-studio-0nlg.onrender.com | `potassiumdichromate/creator-studio` | Stores and publishes games; engagement numbers |
 | AI Arena Postgres | (private) | `0g-AIArena` | Which player owns which agent (read-only) |
 | 0G mainnet | chain 16661 | — | AI Arena INFT contract `0xA8A5a1D6AA3BF4575f6a1031966C8079BD4e9b9b` |
 | X Layer | chain 196 | — | ERC-8004 IdentityRegistry `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` (OKX.ai, optional) |

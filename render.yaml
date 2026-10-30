@@ -28,7 +28,7 @@ services:
       - key: COMPUTE_LAYER_KEY
         sync: false
       - key: CREATOR_STUDIO_URL
-        value: https://creator-studio-pi5b.onrender.com
+        value: https://creator-studio-0nlg.onrender.com
       - key: CREATOR_STUDIO_KEY
         sync: false
       - key: CEO_INFT_VERIFY
