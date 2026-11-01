@@ -1,5 +1,6 @@
 import express from "express";
 import { randomUUID, timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { config, ROOT } from "./config.js";
@@ -334,9 +335,25 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
   // ------------------------------------------------------------ office
   // Drop-in script Kult World loads to open the office (cross-origin <script>).
   app.get("/embed.js", (_req, res) => { res.set("Cache-Control", "public, max-age=300"); res.sendFile(join(ROOT, "public", "embed.js")); });
-  // Office files revalidate on every load (ETag), so a deploy shows up
-  // immediately; the Privy bundle's hashed chunks never change and cache forever.
-  app.use("/office", express.static(join(ROOT, "public", "office"), {
+  // The page links its CSS and scripts under /office/v/<build>/, so each deploy
+  // has new URLs and no cache in front (Cloudflare's browser TTL included) can
+  // keep an old office; the scripts' relative imports follow the same prefix.
+  // The page itself is never cached.
+  const office = join(ROOT, "public", "office");
+  const build = (process.env.RENDER_GIT_COMMIT || "").slice(0, 12) || Date.now().toString(36);
+  const officePage = readFileSync(join(office, "index.html"), "utf8")
+    .replace(/(<(?:link|script)\b[^>]*\b(?:href|src)=")(?![a-z]+:|\/|\?|#)([^"]+")/g, `$1v/${build}/$2`);
+  app.get(["/office/", "/office/index.html"], (req, res) => {
+    // Its links are relative: /office must become /office/ (routing isn't strict).
+    if (req.path === "/office") { res.redirect(301, `/office/${req.originalUrl.slice("/office".length)}`); return; }
+    res.set("Cache-Control", "no-store").type("html").send(officePage);
+  });
+  const versioned = express.static(office, { setHeaders: (r) => r.set("Cache-Control", "public, max-age=31536000, immutable") });
+  const stale = express.static(office, { setHeaders: (r) => r.set("Cache-Control", "no-cache") });
+  app.use("/office/v/:build", (req, res, next) => (req.params.build === build ? versioned : stale)(req, res, next));
+  // Unversioned office files (models, the Privy bundle) revalidate on every
+  // load (ETag); the Privy bundle's hashed chunks never change and cache forever.
+  app.use("/office", express.static(office, {
     setHeaders: (res, path) => {
       res.set("Cache-Control", /[\\/]privy[\\/]chunks[\\/]/.test(path) ? "public, max-age=31536000, immutable" : "no-cache");
     }
