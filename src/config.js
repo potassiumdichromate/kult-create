@@ -87,6 +87,9 @@ export const config = {
   // Services this building uses.
   computeLayer: { url: env("COMPUTE_LAYER_URL", "http://localhost:4100").replace(/\/$/, ""), key: env("COMPUTE_LAYER_KEY", "") },
   creatorStudio: { url: env("CREATOR_STUDIO_URL", "http://localhost:3001").replace(/\/$/, ""), key: env("CREATOR_STUDIO_KEY", "") },
+  // The Kult OKX gateway (AI Arena's marketplace service) starts paid builds
+  // for studios its owners linked to OKX.AI. Same value as KULT_CREATE_GATEWAY_KEY there.
+  gateway: { key: env("GATEWAY_KEY", "") },
   pollMs: num("PRODUCTION_POLL_MS", 2000)
 };
 

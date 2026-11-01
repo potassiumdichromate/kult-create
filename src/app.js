@@ -1,5 +1,5 @@
 import express from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import { config, ROOT } from "./config.js";
@@ -293,6 +293,42 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     await store.update("productions", p.id, { published });
     await store.update("agencies", a.id, publish ? { gamesPublished: (a.gamesPublished || 0) + 1 } : {});
     res.json({ published });
+  }));
+
+  // ------------------------------------------------------------ OKX gateway
+  // The Kult OKX gateway sells a studio's builds to OKX users, paid per call
+  // (x402) straight to the owner. It finds a player's studio by wallet, starts
+  // a build after the buyer's payment is verified, and polls it to delivery.
+  // The build spends the studio's credits like any other production.
+  const gatewayAuth = (req, res, next) => {
+    const key = req.get("x-kult-gateway-key") || "";
+    const want = config.gateway.key;
+    if (!want) { res.status(503).json({ error: "The OKX gateway is not configured on this studio service" }); return; }
+    if (key.length !== want.length || !timingSafeEqual(Buffer.from(key), Buffer.from(want))) { res.status(401).json({ error: "Bad gateway key" }); return; }
+    next();
+  };
+  const gatewayStudio = (a) => ({ id: a.id, name: a.name, tagline: a.tagline ?? "", credits: a.credits, okxAgentId: a.okxAgentId ?? null,
+    ceo: { name: a.ceo?.name ?? null, archetype: a.ceo?.archetype ?? null, agentId: a.ceo?.agentId ?? null }, gamesMade: a.gamesMade ?? 0 });
+  const gatewayBuildSchema = z.object({ brief: z.string().trim().min(8).max(2000), mode: z.enum(["pro", "ultra"]).optional().default("pro") });
+
+  app.get("/gateway/studios", gatewayAuth, wrap(async (req, res) => {
+    const wallets = String(req.query.wallets || "").split(",").map((w) => w.trim()).filter(Boolean).map(normalize);
+    const agency = wallets.length ? await agencyFor(wallets) : null;
+    res.json({ studios: agency ? [gatewayStudio(agency)] : [] });
+  }));
+
+  app.post("/gateway/studios/:id/productions", gatewayAuth, wrap(async (req, res) => {
+    const agency = await store.findOne("agencies", { id: req.params.id });
+    if (!agency) { res.status(404).json({ error: "Studio not found" }); return; }
+    const body = gatewayBuildSchema.parse(req.body);
+    const { production, balance } = await productions.create(agency, body);
+    res.status(202).json({ production: publicProduction(production), credits: balance });
+  }));
+
+  app.get("/gateway/studios/:id/productions/:pid", gatewayAuth, wrap(async (req, res) => {
+    const p = await store.findOne("productions", { id: req.params.pid });
+    if (!p || p.agencyId !== req.params.id) { res.status(404).json({ error: "Production not found" }); return; }
+    res.json({ production: publicProduction(p) });
   }));
 
   // ------------------------------------------------------------ office

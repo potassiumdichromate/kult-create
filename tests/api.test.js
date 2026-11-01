@@ -329,3 +329,31 @@ test("top games across Kult Create are playable in the office", async () => {
   assert.equal(r.body.games[1].playUrl, "https://studio/play?gameId=g2");
   assert.equal((await call("GET", "/games/top")).status, 401);
 });
+
+test("the OKX gateway finds a studio by wallet and runs a paid build for it", async () => {
+  const { config } = await import("../src/config.js");
+  const gw = (method, path, body, key = "gw-test-key") =>
+    fetch(`${base}${path}`, { method, headers: { "Content-Type": "application/json", "x-kult-gateway-key": key }, body: body ? JSON.stringify(body) : undefined })
+      .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+  config.gateway.key = "";
+  assert.equal((await gw("GET", `/gateway/studios?wallets=${owner.address}`)).status, 503);
+  config.gateway.key = "gw-test-key";
+  assert.equal((await gw("GET", `/gateway/studios?wallets=${owner.address}`, null, "nope-nope-no")).status, 401);
+  const none = await gw("GET", `/gateway/studios?wallets=${Wallet.createRandom().address}`);
+  assert.deepEqual(none.body.studios, []);
+  const found = await gw("GET", `/gateway/studios?wallets=${owner.address}`);
+  assert.equal(found.status, 200);
+  const studio = found.body.studios[0];
+  assert.equal(studio.name, "Pixel Pirates");
+  const started = await gw("POST", `/gateway/studios/${studio.id}/productions`, { brief: "A neon runner where a cat dodges lasers" });
+  assert.equal(started.status, 202);
+  assert.equal(started.body.production.mode, "pro");
+  const pid = started.body.production.id;
+  const done = await waitFor(async () => {
+    const r = await gw("GET", `/gateway/studios/${studio.id}/productions/${pid}`);
+    return r.body.production?.status === "complete" ? r : null;
+  });
+  assert.match(done.body.production.result.playUrl, /^https:\/\/compute\/play\//);
+  assert.equal((await gw("GET", `/gateway/studios/agy_other/productions/${pid}`)).status, 404);
+  config.gateway.key = "";
+});
