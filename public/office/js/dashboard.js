@@ -31,7 +31,7 @@ const METRICS = {
 };
 
 // Bar chart drawn at the canvas's real on-screen size (times the device
-// pixel ratio), so text stays sharp at any width. Bars keep the chunky look.
+// pixel ratio), so text stays sharp at any width. Bars glow in the metric's colour.
 function drawChart(canvas, points, metric) {
   const dpr = window.devicePixelRatio || 1;
   const W = Math.max(280, Math.round(canvas.clientWidth || 600)), H = Math.round(canvas.clientHeight || 220);
@@ -44,14 +44,14 @@ function drawChart(canvas, points, metric) {
   const max = Math.max(...values, 0);
   const left = 54, right = 10, top = 22, bottom = 30;
   const plotW = W - left - right, plotH = H - top - bottom;
-  const font = (px, weight = 400) => `${weight} ${px}px "Pixelify Sans", ui-sans-serif, sans-serif`;
+  const font = (px, weight = 400) => `${weight} ${px}px Inter, system-ui, sans-serif`;
 
   // Value axis: 0, half, max (a nice round max so the grid reads well).
   const niceMax = max <= 0 ? 1 : (() => { const p = 10 ** Math.floor(Math.log10(max)); const f = max / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; })();
   g.font = font(12); g.textBaseline = "middle"; g.textAlign = "right";
   for (const frac of [0, 0.5, 1]) {
     const y = Math.round(top + plotH - frac * plotH) + 0.5;
-    g.strokeStyle = frac === 0 ? "#3a2f6e" : "#241a4a"; g.lineWidth = 1;
+    g.strokeStyle = frac === 0 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.07)"; g.lineWidth = 1;
     g.beginPath(); g.moveTo(left, y); g.lineTo(W - right, y); g.stroke();
     g.fillStyle = "#a49cd0"; g.fillText(m.fmt(niceMax * frac), left - 8, y);
   }
@@ -71,11 +71,11 @@ function drawChart(canvas, points, metric) {
     const h = v > 0 ? Math.max(3, Math.round((v / niceMax) * plotH)) : 0;
     const y = top + plotH - h;
     if (h) {
-      g.fillStyle = "#000"; g.fillRect(x + 3, y + 3, bw, h);           // pixel drop shadow
-      g.fillStyle = m.color; g.fillRect(x, y, bw, h);
-      g.fillStyle = "rgba(255,255,255,0.35)"; g.fillRect(x, y, bw, 3); // highlight
-      g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(x + bw - 3, y, 3, h); // shade
-      g.textAlign = "center"; g.textBaseline = "bottom"; g.fillStyle = "#ece8ff"; g.font = font(12, 600);
+      const grad = g.createLinearGradient(0, y, 0, y + h); grad.addColorStop(0, m.color); grad.addColorStop(1, `${m.color}55`);
+      g.save(); g.shadowColor = m.color; g.shadowBlur = 14; g.fillStyle = grad;
+      g.beginPath(); g.roundRect(x, y, bw, h, [Math.min(8, bw / 2), Math.min(8, bw / 2), 2, 2]); g.fill(); g.restore();
+      g.fillStyle = "rgba(255,255,255,0.4)"; g.fillRect(x + 3, y + 2, bw - 6, 2); // highlight
+      g.textAlign = "center"; g.textBaseline = "bottom"; g.fillStyle = "#f1edff"; g.font = font(12, 600);
       g.fillText(m.fmt(v), x + bw / 2, y - 3);
     }
   });

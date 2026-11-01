@@ -38,24 +38,14 @@ const state = {
 // ------------------------------------------------------------------ office canvas
 const canvas = $("office");
 const office = new Office(canvas);
+if (new URLSearchParams(location.search).has("debug")) window.kc = { office };
 office.lightsOn = false;
 let scale = 1;
 
 function fit() {
   const box = $("stage").getBoundingClientRect();
   if (!box.width || !box.height) return; // hidden (another view is open)
-  const s = Math.min(box.width / office.W, box.height / office.H);
-  if (office.art) {
-    // Draw at exactly the screen's pixel size: the browser never resamples
-    // the canvas, so the pixel art stays sharp at any window size.
-    scale = Math.max(0.5, s);
-    office.setPixelScale(scale * (window.devicePixelRatio || 1));
-  } else {
-    scale = s >= 2 ? Math.floor(s) : Math.max(0.5, s);
-  }
-  canvas.style.width = `${Math.round(office.W * scale)}px`;
-  canvas.style.height = `${Math.round(office.H * scale)}px`;
-  canvas.style.imageRendering = "pixelated";
+  office.resize(box.width, box.height);
 }
 new ResizeObserver(fit).observe($("stage"));
 
@@ -135,44 +125,6 @@ function busy(button, on, label) {
   else { button.textContent = button.dataset.label || button.textContent; button.disabled = false; }
 }
 
-// ------------------------------------------------------------------ custom art
-// public/office/art/ (built by scripts/import-art.mjs). Without it the office
-// keeps its drawn look.
-async function loadArt() {
-  try {
-    const res = await fetch(`art/manifest.json?t=${Date.now()}`, { cache: "no-store" });
-    if (!res.ok) return;
-    const manifest = await res.json();
-    const groups = [manifest.background ? [manifest.background] : [], Object.values(manifest.sprites || {}), Object.values(manifest.characters || {}), Object.values(manifest.icons || {})];
-    // CEO art (one sheet per archetype) is fetched on demand by the office.
-    const files = [...new Set(groups.flat().map((x) => x.file).filter(Boolean))];
-    // Versioned URLs: a new art import changes rev, so no cache serves old art.
-    const artUrl = (file) => `art/${file}${manifest.rev ? `?v=${manifest.rev}` : ""}`;
-    const images = {};
-    await Promise.all(files.map((file) => new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => { images[file] = img; resolve(); };
-      img.onerror = resolve;
-      img.src = artUrl(file);
-    })));
-    if (!office.useArt(manifest, images, artUrl)) return;
-    document.body.classList.add("has-art");
-    // Sidebar and HUD icons from the art.
-    const icon = (name) => manifest.icons?.[name] && images[manifest.icons[name].file] ? artUrl(manifest.icons[name].file) : null;
-    for (const b of document.querySelectorAll(".nav-item")) {
-      const src = icon(b.dataset.view);
-      if (src) b.querySelector(".ico")?.replaceWith(el("img", { class: "ico", src, alt: "" }));
-    }
-    const emblem = icon("emblem");
-    if (emblem) document.querySelector(".logo")?.replaceChildren(el("img", { src: emblem, alt: "" }));
-    const coin = icon("coin");
-    if (coin) for (const c of document.querySelectorAll(".coin")) c.replaceWith(el("img", { class: `coin-img${c.classList.contains("big") ? " big" : ""}`, src: coin, alt: "" }));
-    fit();
-  } catch (e) {
-    console.warn("[kult-create] custom art not loaded", e);
-  }
-}
-
 // ------------------------------------------------------------------ entrance & registration
 async function boot() {
   try {
@@ -189,7 +141,6 @@ async function boot() {
   $("cost-edit").textContent = credits.edit;
   $("no-agent-create").href = state.cfg.aiArenaUrl || "https://app.kult.games";
   for (const e of employees) state.staff.set(e.id, e);
-  await loadArt();
   office.setStaff(employees, null);
   if (embedded) show("exit");
   // Inside Kult World the player is already signed in with Privy: ask the

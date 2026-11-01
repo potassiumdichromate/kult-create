@@ -3,7 +3,7 @@
 The game-studio building in **Kult World**. Players sign in with their KULT
 Privy account, register their indie studio as an **Agency**, their own KULT
 agent (AI Arena INFT on 0G) becomes the **CEO**, and the KULT compute layer's specialist agents work as
-**employees** in an isometric pixel-art office. The CEO writes a brief, the
+**employees** in a glowing 3D isometric office. The CEO writes a brief, the
 team builds the game live, and the finished game can be published to Kult
 Creator Studio.
 
@@ -63,12 +63,22 @@ Kult World ──iframe──▶ /office/ (this service)
    Creator Studio to import the run (art copied to its storage, 0G provenance,
    the same publish steps as a normal game) under the studio's wallet.
 
-## Custom art
+## The office in 3D
 
-The office is drawn in code today. To make custom art for it (room,
-furniture, characters) in ChatGPT, follow
-[docs/art/ART_DIRECTION.md](docs/art/ART_DIRECTION.md): style guide,
-templates and copy-paste prompts.
+The office is a three.js scene in the Kult World look: a glowing studio floor
+floating at neon dusk, with bloom and a glass UI around it.
+
+- `public/office/js/office3d.js`: the scene (room, lights, furniture, people,
+  effects, portraits). Kult Sports keeps a copy; keep the two in sync.
+- `public/office/js/world.js`: this office's floor plan, departments, desk
+  props, arcade cabinet and the big screen.
+- The CEO is the player's own archetype model from Kult World
+  (`public/office/models/agent-<archetype>.glb`, with Idle, Walk and Wave
+  clips). The employees are built in code.
+- Drag the office to turn it, scroll to zoom, double-click to reset.
+
+The pixel-art files (`public/office/art/`, `docs/art/`) are from the old 2D
+office and are no longer used by it.
 
 ## Run locally
 

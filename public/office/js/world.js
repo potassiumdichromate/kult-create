@@ -1,862 +1,212 @@
-// The isometric pixel-art office. Everything is drawn procedurally on a small
-// canvas (640x320) that CSS scales up with crisp pixels. Employees sit at
-// desks, type while their pipeline step runs, pop a check mark when it is
-// done, and the CEO walks the floor checking in on whoever just started.
+// The Kult Create office: a glowing 3D isometric studio floor (see
+// office3d.js for the scene). Employees sit at desks grouped by department,
+// type while their pipeline step runs, pop a check mark when it is done, and
+// the CEO (the player's own agent model) walks the floor checking in on
+// whoever just started. The big screen shows the production live.
+import * as THREE from "three";
+import { OfficeScene, M, FONT, box, canvasTex, lightPool, V } from "./office3d.js";
 
-export const W = 640, H = 320;
-const OX = 304, OY = 80;           // screen position of grid corner (0,0)
-const ROOM_X = 14, ROOM_Y = 12;    // floor size in tiles
-const WALL = 70;                   // wall height in pixels
-
-const drawnIso = (gx, gy, z = 0) => [OX + (gx - gy) * 16, OY + (gx + gy) * 8 - z];
-// Grid -> canvas. Replaced by the art background's calibrated projection
-// when custom art is loaded (see Office.useArt).
-export let iso = drawnIso;
-
-// ------------------------------------------------------------------ layout
-// Desk centre (x, y); the employee sits behind it (see seatOf), facing us.
+// Desk centre (x, y); the employee sits behind it, facing the room.
 const DESKS = {
-  producer: [2.2, 4], designer: [4.6, 4],
-  artdirector: [7.4, 4], illustrator: [9.8, 4], background: [12.2, 4],
-  engineer: [2.2, 8], qa: [4.6, 8], playtester: [7.0, 8],
-  marketing: [9.8, 8], publisher: [12.2, 8]
+  producer: [2.2, 4.8], designer: [4.6, 4.8],
+  artdirector: [7.4, 4.8], illustrator: [9.8, 4.8], background: [12.2, 4.8],
+  engineer: [2.2, 8.8], qa: [4.6, 8.8], playtester: [7.0, 8.8],
+  marketing: [9.8, 8.8], publisher: [12.2, 8.8]
 };
 const DEPARTMENTS = [
-  { label: "PLANNING", x: 3.4, y: 4, color: "#ff7eb6" },
-  { label: "ART", x: 9.8, y: 4, color: "#c792ea" },
-  { label: "ENGINEERING", x: 4.6, y: 8, color: "#4dd4ac" },
-  { label: "LAUNCH", x: 11, y: 8, color: "#ffd166" }
+  { label: "PLANNING", ids: ["producer", "designer"], color: "#ff7eb6" },
+  { label: "ART", ids: ["artdirector", "illustrator", "background"], color: "#c792ea" },
+  { label: "ENGINEERING", ids: ["engineer", "qa"], color: "#4dd4ac" },
+  { label: "LAUNCH", ids: ["playtester", "marketing", "publisher"], color: "#ffd166" }
 ];
-let AISLES = [1.7, 5.75, 9.8];     // walkable rows: behind row A, between rows, front
-const CORRIDOR_X = 13.55;          // walkable column on the right
-let CEO_HOME = [7, 1.7];
-const SCREEN = { x0: 4.4, x1: 9.6, z0: 16, z1: 58 };
+const LAYOUT = { aisles: [1.7, 6.6, 10.4], corridorX: 13.55, ceoHome: [6.75, 1.95] };
+const seatOf = ([x, y]) => [x - 0.75, y - 0.8];
 
-const SKINS = ["#f5d0a9", "#e0ac69", "#c68642", "#8d5524", "#ffdbac", "#f1c27d"];
-const HAIRS = ["#2b1b17", "#5a3825", "#d6b370", "#a52a2a", "#1c1c3c", "#e8e8e8", "#6b4f9e"];
-
-const shade = (hex, f) => {
-  const n = parseInt(hex.slice(1), 16);
-  const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
-  return `rgb(${c(n >> 16)},${c((n >> 8) & 255)},${c(n & 255)})`;
+const THEME = {
+  bg: "#0b0717", slab: "#1a1238", edge: "#ff4fa3", accents: ["#ff4fa3", "#4fd8ff"],
+  floor: ["#6b4a3a", "#74513f", "#7a5644", "#664535"],
+  wall: "#3a2f78", wallDark: "#1c1640", wallTop: "#6d5bd0", trim: "#a98bff",
+  sky: ["#1b2a6b", "#6b3f8f"], cityLights: ["#ffd166", "#ffe9a8", "#4fd8ff", "#ff7eb6"],
+  screenLight: "#4fd8ff", neon: [["KULT", "#ff4fa3"], ["CREATE", "#3fe3ff"]],
+  rug: "#3b2a6b", rugInner: "#5a46a8", rugEdge: "#a98bff",
+  desk: "#e9e5f5", deskPanel: "#3d3560", chair: "#4b4275", counter: "#5b4a8a",
+  key: "#ffc9a8", fill: ["#a596ff", "#2a1650"], rim: "#4fd8ff",
+  confetti: ["#ff7eb6", "#7ee081", "#ffd166", "#5ec8f2", "#c792ea", "#f78c6b"],
+  models: "models/"
 };
-const hash = (s) => [...String(s)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
 
-export class Office {
+export class Office extends OfficeScene {
   constructor(canvas) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.W = W; this.H = H;
-    canvas.width = W; canvas.height = H;
-    this.ctx.imageSmoothingEnabled = false;
-    this.art = null;                 // custom art (manifest + images), see useArt()
-    this.t = 0;
-    this.people = new Map();
-    this.particles = [];
-    this.notes = [];                 // sticky notes on the whiteboard (finished steps)
-    this.screen = { mode: "idle", title: "", progress: 0, image: null, lines: [] };
-    this.portrait = null;
-    this.lightsOn = true;
-    this.screenCanvas = document.createElement("canvas");
-    this.screenCanvas.width = 156; this.screenCanvas.height = 66;
-    this.static = null;
+    super(canvas, THEME, LAYOUT);
+    this.deskViews = [];
+    for (const [id, d] of Object.entries(DESKS)) {
+      const dept = DEPARTMENTS.find((x) => x.ids.includes(id));
+      const view = this.addDesk(d[0], d[1], { ledColor: dept.color, seat: seatOf(d) });
+      this.deskProp(id, view);
+      this.deskViews.push({ screen: view.screen, person: () => this.people.get(id) });
+    }
+    for (const dept of DEPARTMENTS) this.addDepartment(dept);
+    this.addPodium(5.5, 1.3);
+    this.addPlant(0.7, 11.3); this.addPlant(13.3, 0.7);
+    this.addCooler(0.6, 0.6);
+    this.addCoffee(13.0, 10.8);
+    this.addArcade(0.55, 4.2);
   }
 
   // ---------------------------------------------------------------- staff
   setStaff(employees, ceo) {
+    for (const p of this.people.values()) this.unembody(p);
     this.people.clear();
-    // The CEO is the player's agent: its look comes from its AI Arena archetype.
+    // The CEO is the player's agent: its model comes from its AI Arena archetype.
     this.ceoArchetype = String(ceo?.archetype || "hybrid").toLowerCase();
     for (const e of employees) {
-      const h = hash(e.id + (e.name || ""));
-      const isCeo = e.id === "ceo";
-      const desk = DESKS[e.id];
-      const pos = isCeo ? [...CEO_HOME] : this.seatOf(desk);
-      this.people.set(e.id, {
-        ...e,
-        name: isCeo ? ceo?.name || "CEO" : e.name,
-        isCeo, desk,
+      const isCeo = e.id === "ceo", desk = DESKS[e.id];
+      const seat = desk && seatOf(desk), pos = isCeo ? [...LAYOUT.ceoHome] : seat;
+      const p = {
+        ...e, name: isCeo ? ceo?.name || "CEO" : e.name, isCeo, desk, seat, look: e.id,
         x: pos[0], y: pos[1], path: [], walking: false, facing: 1,
-        skin: SKINS[h % SKINS.length], hair: HAIRS[(h >> 3) % HAIRS.length], hairStyle: (h >> 6) % 5,
-        state: "idle", stateAt: 0, blinkAt: 2 + (h % 50) / 10, phase: (h % 100) / 100 * Math.PI * 2
-      });
+        state: "idle", stateAt: 0, phase: ((e.id.length * 37 + e.id.charCodeAt(0)) % 100) / 100 * Math.PI * 2
+      };
+      this.people.set(e.id, p);
+      this.embody(p);
     }
   }
-
-  // Where an employee sits: behind the monitor. The art desk has its monitor
-  // further left than the drawn one.
-  seatOf(desk) { return this.art ? [desk[0] - 0.75, desk[1] - 0.8] : [desk[0], desk[1] - 0.95]; }
-
   person(id) { return this.people.get(id); }
+  setState(id, state) { const p = this.people.get(id); if (p) { p.state = state; p.stateAt = this.t; } }
+  resetStates() { for (const p of this.people.values()) p.state = "idle"; this.clearNotes(); }
 
-  setState(id, state) {
-    const p = this.people.get(id);
-    if (!p) return;
-    p.state = state;
-    p.stateAt = this.t;
-  }
-
-  resetStates() { for (const p of this.people.values()) { p.state = "idle"; } this.notes = []; }
-
-  // CEO walks to stand in front of an employee's desk, then goes home.
+  // The CEO walks to stand in front of an employee's desk, then goes home.
   visit(id) {
     const ceo = this.people.get("ceo"), target = this.people.get(id);
     if (!ceo || !target || target.isCeo) return;
     if (ceo.path.length > 2) return; // already busy walking
-    const stand = [target.desk[0], target.desk[1] + 0.95];
-    this.walkTo(ceo, stand, () => setTimeout(() => this.walkTo(ceo, CEO_HOME), 1600));
-  }
-
-  walkTo(p, [tx, ty], done) {
-    const aisleOf = (y) => AISLES.reduce((a, b) => (Math.abs(b - y) < Math.abs(a - y) ? b : a));
-    const from = aisleOf(p.y), to = aisleOf(ty);
-    const pts = [];
-    if (Math.abs(p.y - from) > 0.05) pts.push([p.x, from]);
-    if (from !== to) { pts.push([CORRIDOR_X, from], [CORRIDOR_X, to]); }
-    pts.push([tx, to]);
-    if (Math.abs(ty - to) > 0.05) pts.push([tx, ty]);
-    p.path = pts;
-    p.onArrive = done || null;
-  }
-
-  // ---------------------------------------------------------------- effects
-  packet(fromId, color) {
-    const p = this.people.get(fromId);
-    if (!p) return;
-    const [sx, sy] = this.art ? this.artAnchor(p) : iso(p.x, p.y, 34);
-    const [tx, ty] = this.art ? this.quadCenter(this.art.bg.screen) : iso((SCREEN.x0 + SCREEN.x1) / 2, 0, (SCREEN.z0 + SCREEN.z1) / 2);
-    this.particles.push({ kind: "packet", sx, sy, tx, ty, t0: this.t, dur: 0.9, color });
-  }
-
-  confetti() {
-    const [cx, cy] = this.art ? this.quadCenter(this.art.bg.screen) : iso((SCREEN.x0 + SCREEN.x1) / 2, 0, SCREEN.z1);
-    const colors = ["#ff7eb6", "#7ee081", "#ffd166", "#5ec8f2", "#c792ea", "#f78c6b"];
-    for (let i = 0; i < 90; i += 1) {
-      this.particles.push({ kind: "confetti", x: cx + (Math.random() - 0.5) * 80, y: cy - Math.random() * 10, vx: (Math.random() - 0.5) * 70, vy: -40 - Math.random() * 60, t0: this.t, dur: 2.6 + Math.random(), color: colors[i % colors.length] });
-    }
-  }
-
-  addNote(color) { if (this.notes.length < 24) this.notes.push({ color, tilt: Math.random() < 0.5 ? 0 : 1 }); }
-
-  // Screen-space anchor above a person's head, for DOM speech bubbles.
-  anchor(id) {
-    const p = this.people.get(id);
-    if (!p) return null;
-    if (this.art) return this.artAnchor(p);
-    const sitting = !p.isCeo && !p.walking;
-    return iso(p.x, p.y, sitting ? 44 : 44);
-  }
-
-  hit(x, y) {
-    if (this.art) return this.artHit(x, y);
-    let best = null;
-    for (const p of this.people.values()) {
-      const [sx, sy] = iso(p.x, p.y, 0);
-      const top = sy - (p.isCeo ? 34 : 38);
-      if (x >= sx - 8 && x <= sx + 8 && y >= top && y <= sy - (p.isCeo ? 0 : 12)) {
-        if (!best || p.y > best.y) best = p;
-      }
-    }
-    return best;
-  }
-
-  // ---------------------------------------------------------------- loop
-  update(dt) {
-    this.t += dt;
-    for (const p of this.people.values()) {
-      if (!p.path.length) { p.walking = false; continue; }
-      p.walking = true;
-      const [tx, ty] = p.path[0];
-      const dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy), step = 3.2 * dt;
-      if (Math.abs(dx - dy) > 0.01) p.facing = dx - dy > 0 ? 1 : -1;
-      if (d <= step) {
-        p.x = tx; p.y = ty; p.path.shift();
-        if (!p.path.length) { p.walking = false; const f = p.onArrive; p.onArrive = null; f?.(); }
-      } else { p.x += (dx / d) * step; p.y += (dy / d) * step; }
-    }
-    this.particles = this.particles.filter((q) => this.t - q.t0 < q.dur);
-  }
-
-  draw() {
-    if (this.art) { this.drawArt(); return; }
-    const g = this.ctx;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    if (!this.static) this.static = this.buildStatic();
-    g.drawImage(this.static, 0, 0);
-    this.drawWallDynamic(g);
-    // Depth-sorted scene objects.
-    const items = [];
-    for (const [id, [x, y]] of Object.entries(DESKS)) {
-      items.push({ k: x + y + 0.01, draw: () => this.drawChair(g, x, y - 1.25, id) });
-      items.push({ k: x + y + 0.5, draw: () => this.drawDesk(g, x, y, id) });
-    }
-    for (const p of this.people.values()) items.push({ k: p.x + p.y + 0.02, draw: () => this.drawPerson(g, p) });
-    items.push({ k: 6.4 + 1.2, draw: () => this.drawPodium(g) });
-    items.push({ k: 0.7 + 11.3, draw: () => this.drawPlant(g, 0.7, 11.3) });
-    items.push({ k: 13.4 + 11.2, draw: () => this.drawCoffee(g, 13.0, 10.8) });
-    items.push({ k: 0.6 + 0.6, draw: () => this.drawCooler(g, 0.6, 0.6) });
-    items.push({ k: 13.3 + 0.7, draw: () => this.drawPlant(g, 13.3, 0.7) });
-    items.sort((a, b) => a.k - b.k);
-    for (const it of items) it.draw();
-    this.drawStatusIcons(g);
-    this.drawParticles(g);
-    if (!this.lightsOn) { g.fillStyle = "rgba(8,6,24,0.55)"; g.fillRect(0, 0, W, H); }
-  }
-
-  // ---------------------------------------------------------------- primitives
-  poly(g, pts, fill) {
-    g.beginPath();
-    g.moveTo(Math.round(pts[0][0]), Math.round(pts[0][1]));
-    for (const p of pts.slice(1)) g.lineTo(Math.round(p[0]), Math.round(p[1]));
-    g.closePath();
-    g.fillStyle = fill;
-    g.fill();
-  }
-
-  box(g, x, y, w, d, h, color, z = 0) {
-    const A = iso(x, y, z + h), B = iso(x + w, y, z + h), C = iso(x + w, y + d, z + h), D = iso(x, y + d, z + h);
-    const B0 = iso(x + w, y, z), C0 = iso(x + w, y + d, z), D0 = iso(x, y + d, z);
-    this.poly(g, [D, C, C0, D0], shade(color, 0.78));
-    this.poly(g, [B, C, C0, B0], shade(color, 0.62));
-    this.poly(g, [A, B, C, D], color);
-  }
-
-  // A flat quad on the back-right wall (gy = 0) from gx x0..x1, height z0..z1.
-  wallQuadR(g, x0, x1, z0, z1, fill) { this.poly(g, [iso(x0, 0, z1), iso(x1, 0, z1), iso(x1, 0, z0), iso(x0, 0, z0)], fill); }
-  wallQuadL(g, y0, y1, z0, z1, fill) { this.poly(g, [iso(0, y0, z1), iso(0, y1, z1), iso(0, y1, z0), iso(0, y0, z0)], fill); }
-
-  // Draws an image/canvas onto the back-right wall plane.
-  imageOnWallR(g, img, x0, x1, z0, z1) {
-    const [sx, sy] = iso(x0, 0, z1);
-    const wTiles = x1 - x0, hPx = z1 - z0;
-    g.save();
-    g.setTransform((16 * wTiles) / img.width, (8 * wTiles) / img.width, 0, hPx / img.height, sx, sy);
-    g.drawImage(img, 0, 0);
-    g.restore();
-  }
-  imageOnWallL(g, img, y0, y1, z0, z1) {
-    const [sx, sy] = iso(0, y0, z1);
-    const wTiles = y1 - y0, hPx = z1 - z0;
-    g.save();
-    g.setTransform((-16 * wTiles) / img.width, (8 * wTiles) / img.width, 0, hPx / img.height, sx, sy);
-    g.drawImage(img, 0, 0);
-    g.restore();
-  }
-
-  // ---------------------------------------------------------------- static layer
-  buildStatic() {
-    const c = document.createElement("canvas");
-    c.width = W; c.height = H;
-    const g = c.getContext("2d");
-    g.imageSmoothingEnabled = false;
-    // Backdrop
-    const bg = g.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, "#1a1033"); bg.addColorStop(1, "#0b0717");
-    g.fillStyle = bg; g.fillRect(0, 0, W, H);
-    // Floor: warm wood planks with department rugs.
-    for (let gx = 0; gx < ROOM_X; gx += 1) {
-      for (let gy = 0; gy < ROOM_Y; gy += 1) {
-        const [x, y] = iso(gx, gy);
-        const base = (gx + gy) % 2 ? "#6b4a3a" : "#74513f";
-        this.diamond(g, x, y, base);
-        g.fillStyle = "rgba(0,0,0,0.12)";
-        g.fillRect(x - 1, y + 7, 2, 1);
-      }
-    }
-    const rug = (x0, y0, x1, y1, color) => this.poly(g, [iso(x0, y0), iso(x1, y0), iso(x1, y1), iso(x0, y1)], color);
-    rug(4.6, 0.6, 9.4, 2.7, "#3b2a6b");
-    rug(4.9, 0.85, 9.1, 2.45, "#4b3a8b");
-    for (const d of DEPARTMENTS) rug(d.x - 2.4, d.y - 1.7, d.x + 2.4, d.y + 0.85, shade(d.color, 0.32));
-    // Walls
-    const wallL = "#2e2457", wallR = "#3a2f6e";
-    this.poly(g, [iso(0, 0, WALL), iso(0, ROOM_Y, WALL), iso(0, ROOM_Y, 0), iso(0, 0, 0)], wallL);
-    this.poly(g, [iso(0, 0, WALL), iso(ROOM_X, 0, WALL), iso(ROOM_X, 0, 0), iso(0, 0, 0)], wallR);
-    // Skirting and top trim
-    this.poly(g, [iso(0, 0, 6), iso(0, ROOM_Y, 6), iso(0, ROOM_Y, 0), iso(0, 0, 0)], "#221a44");
-    this.poly(g, [iso(0, 0, 6), iso(ROOM_X, 0, 6), iso(ROOM_X, 0, 0), iso(0, 0, 0)], "#2a2152");
-    this.poly(g, [iso(0, 0, WALL + 4), iso(0, ROOM_Y, WALL + 4), iso(0, ROOM_Y, WALL), iso(0, 0, WALL)], "#4a3d86");
-    this.poly(g, [iso(0, 0, WALL + 4), iso(ROOM_X, 0, WALL + 4), iso(ROOM_X, 0, WALL), iso(0, 0, WALL)], "#56489a");
-    // Windows on the left wall: night city.
-    for (const [y0, y1] of [[1.6, 3.8], [8.4, 10.6]]) {
-      this.wallQuadL(g, y0 - 0.12, y1 + 0.12, 18, 60, "#171033");
-      this.wallQuadL(g, y0, y1, 21, 57, "#22306b");
-      const sky = document.createElement("canvas"); sky.width = 44; sky.height = 36;
-      const s = sky.getContext("2d");
-      const grad = s.createLinearGradient(0, 0, 0, 36); grad.addColorStop(0, "#1b2a6b"); grad.addColorStop(1, "#6b3f8f");
-      s.fillStyle = grad; s.fillRect(0, 0, 44, 36);
-      for (let i = 0; i < 9; i += 1) { s.fillStyle = "#fff"; s.fillRect((i * 17 + y0 * 11) % 44, (i * 7) % 14, 1, 1); }
-      s.fillStyle = "#0f0b26";
-      for (let i = 0; i < 8; i += 1) { const bh = 8 + ((i * 13 + y0 * 5) % 16); s.fillRect(i * 6, 36 - bh, 5, bh); }
-      s.fillStyle = "#ffd166";
-      for (let i = 0; i < 14; i += 1) s.fillRect((i * 7 + 2) % 44, 24 + ((i * 5) % 10), 1, 1);
-      this.imageOnWallL(g, sky, y0, y1, 21, 57);
-      this.wallQuadL(g, (y0 + y1) / 2 - 0.04, (y0 + y1) / 2 + 0.04, 21, 57, "#171033");
-    }
-    // Whiteboard frame on the left wall (notes are dynamic).
-    this.wallQuadL(g, 4.8, 7.6, 20, 58, "#9aa0b8");
-    this.wallQuadL(g, 4.9, 7.5, 22, 56, "#eef1f8");
-    // Big screen bezel on the right wall.
-    this.wallQuadR(g, SCREEN.x0 - 0.15, SCREEN.x1 + 0.15, SCREEN.z0 - 4, SCREEN.z1 + 4, "#0d0a1c");
-    // Portrait frame (CEO INFT) and neon sign plate.
-    this.wallQuadR(g, 1.3, 3.1, 24, 58, "#c9a227");
-    this.wallQuadR(g, 10.6, 13.4, 34, 58, "#120d26");
-    return c;
-  }
-
-  diamond(g, x, y, color) {
-    g.fillStyle = color;
-    for (let r = 0; r < 16; r += 1) {
-      const hw = r < 8 ? (r + 1) * 2 : (16 - r) * 2;
-      g.fillRect(x - hw, y + r, hw * 2, 1);
-    }
-  }
-
-  drawWallDynamic(g) {
-    // Whiteboard: one sticky note per finished step.
-    this.notes.forEach((n, i) => {
-      const col = i % 6, row = Math.floor(i / 6);
-      const y0 = 5.05 + col * 0.4, z1 = 52 - row * 8;
-      this.wallQuadL(g, y0, y0 + 0.3, z1 - 6, z1, n.color);
+    ceo.lookAt = null;
+    this.walkTo(ceo, [target.desk[0] - 0.4, target.desk[1] + 1.0], () => {
+      ceo.lookAt = [target.seat[0], target.seat[1]];
+      setTimeout(() => { ceo.lookAt = null; this.walkTo(ceo, LAYOUT.ceoHome); }, 1600);
     });
-    // CEO portrait.
-    if (this.portrait?.complete && this.portrait.naturalWidth) {
-      this.imageOnWallR(g, this.portrait, 1.42, 2.98, 27, 55);
+  }
+
+  // Portrait of an employee (for the dashboard's team grid); the CEO's is its model.
+  portraitOf(id) {
+    if (id === "ceo" && this.ceoPortrait) { const c = document.createElement("canvas"); c.width = c.height = this.ceoPortrait.width; c.getContext("2d").drawImage(this.ceoPortrait, 0, 0); return c; }
+    const p = this.people.get(id);
+    return super.portraitOf(id, p?.color);
+  }
+
+  // ---------------------------------------------------------------- props
+  // Each department's floor zone glows in its colour, with its name on the floor.
+  addDepartment({ label, ids, color }) {
+    const xs = ids.map((id) => DESKS[id][0]), y = DESKS[ids[0]][1];
+    const x0 = Math.min(...xs) - 1.25, x1 = Math.max(...xs) + 1.25, y0 = y - 1.55, y1 = y + 0.75;
+    const tex = canvasTex(1024, Math.round(1024 * (y1 - y0) / (x1 - x0)), (g, W, H) => {
+      const grad = g.createLinearGradient(0, 0, 0, H); grad.addColorStop(0, `${color}00`); grad.addColorStop(1, `${color}30`);
+      g.fillStyle = grad; g.beginPath(); g.roundRect(6, 6, W - 12, H - 12, 28); g.fill();
+      g.strokeStyle = `${color}aa`; g.lineWidth = 5; g.setLineDash([26, 16]); g.stroke(); g.setLineDash([]);
+      g.font = `700 ${Math.round(H * 0.11)}px ${FONT}`; g.textBaseline = "bottom"; g.fillStyle = color; g.shadowColor = color; g.shadowBlur = 18;
+      g.fillText(label.split("").join(" "), 34, H - 20);
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, y1 - y0), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1.2, 1.2, 1.2) }));
+    m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.012, (y0 + y1) / 2); m.renderOrder = 1;
+    this.scene.add(m);
+  }
+
+  // A prop on the desk for the role.
+  deskProp(id, view) {
+    const g = new THREE.Group(), at = view.propAt(0.45, 0.05); g.position.copy(at); this.scene.add(g);
+    if (id === "illustrator" || id === "artdirector" || id === "background") {
+      const tab = box(0.5, 0.025, 0.36, M.std("#1c1c2c", { roughness: 0.3 }), 0, 0.012, 0); tab.rotation.x = -0.15; g.add(tab);
+      const art = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), new THREE.MeshBasicMaterial({ map: sketchTexture(id), color: new THREE.Color(1.3, 1.3, 1.3) }));
+      art.rotation.x = -Math.PI / 2 - 0.15; art.position.y = 0.03; g.add(art);
+      const pen = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.22, 6), M.glow("#7ee081", 2)); pen.rotation.z = Math.PI / 2.4; pen.position.set(0.3, 0.03, 0.1); g.add(pen);
+    } else if (id === "playtester") {
+      g.add(box(0.24, 0.05, 0.13, M.std("#26243a", { roughness: 0.4 }), 0, 0.03, 0));
+      for (const [x, c] of [[-0.06, "#ff4fa3"], [0.06, "#4fd8ff"]]) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), M.glow(c, 3)); b.position.set(x, 0.06, 0.01); g.add(b); }
+    } else if (id === "engineer" || id === "qa") {
+      const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.12, 14), M.std("#e8e8f0")); mug.position.set(0.15, 0.06, 0); g.add(mug);
+      const second = box(0.42, 0.28, 0.03, M.std("#1a1828"), -0.15, 0.2, 0.12); second.rotation.y = 0.35; g.add(second);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.24), M.glow(id === "qa" ? "#f78c6b" : "#4dd4ac", 0.8)); scr.rotation.y = Math.PI + 0.35; scr.position.set(-0.155, 0.2, 0.1); g.add(scr);
     } else {
-      this.wallQuadR(g, 1.42, 2.98, 27, 55, "#2b2050");
-      const [x, y] = iso(2.2, 0, 46);
-      g.fillStyle = "#f2c14e"; g.fillRect(x - 3, y - 2, 6, 6); g.fillRect(x - 5, y + 6, 10, 6);
+      for (let i = 0; i < 3; i++) { const sh = box(0.3, 0.012, 0.22, M.std(i ? "#fffbe6" : "#f2f0ff"), 0.02 * i, 0.008 + i * 0.012, 0); sh.rotation.y = (i - 1) * 0.12; g.add(sh); }
+      const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.12, 14), M.std(DEPARTMENTS.find((d) => d.ids.includes(id)).color)); mug.position.set(0.28, 0.06, -0.05); g.add(mug);
     }
-    // Neon sign
-    const flicker = Math.sin(this.t * 13) > -0.97 ? 1 : 0.4;
-    this.neon(g, flicker);
-    // Big screen
-    this.paintScreen();
-    this.imageOnWallR(g, this.screenCanvas, SCREEN.x0, SCREEN.x1, SCREEN.z0, SCREEN.z1);
-    // Clock
-    const [cx, cy] = iso(3.7, 0, 50);
-    g.fillStyle = "#e8e8f0"; g.fillRect(cx - 4, cy - 4, 8, 8);
-    g.fillStyle = "#1a1033"; g.fillRect(cx, cy - 3, 1, 3); g.fillRect(cx, cy, 2 + Math.floor(this.t % 2), 1);
   }
 
-  neon(g, a) {
-    const c = document.createElement("canvas"); c.width = 84; c.height = 24;
-    const s = c.getContext("2d");
-    s.font = "8px 'Press Start 2P', monospace"; s.textBaseline = "top";
-    s.fillStyle = `rgba(255,126,182,${a})`; s.fillText("KULT", 4, 3);
-    s.fillStyle = `rgba(94,200,242,${a})`; s.fillText("CREATE", 4, 13);
-    this.imageOnWallR(g, c, 10.75, 13.25, 36, 56);
+  // An arcade cabinet by the window, playing a little demo.
+  addArcade(x, y) {
+    const g = new THREE.Group(); g.position.set(x, 0, y); g.rotation.y = Math.PI / 2; this.scene.add(g);
+    const body = M.std("#231a4a", { roughness: 0.4, metalness: 0.3 });
+    g.add(box(0.72, 1.7, 0.6, body, 0, 0.85, 0));
+    for (const s of [-1, 1]) g.add(box(0.03, 1.7, 0.62, M.glow(s < 0 ? "#ff4fa3" : "#4fd8ff", 2.6), s * 0.37, 0.85, 0));
+    g.add(box(0.7, 0.24, 0.2, body, 0, 1.0, 0.35));
+    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.2), new THREE.MeshBasicMaterial({ map: canvasTex(256, 80, (c) => { c.fillStyle = "#14082e"; c.fillRect(0, 0, 256, 80); c.font = `700 44px ${FONT}`; c.textAlign = "center"; c.textBaseline = "middle"; c.shadowColor = "#ffd166"; c.shadowBlur = 14; c.fillStyle = "#ffd166"; c.fillText("PLAY", 128, 42); }), color: new THREE.Color(1.6, 1.6, 1.6) }));
+    marquee.position.set(0, 1.58, 0.305); g.add(marquee);
+    const screen = document.createElement("canvas"); screen.width = 160; screen.height = 128;
+    const tex = new THREE.CanvasTexture(screen); tex.colorSpace = THREE.SRGBColorSpace;
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.44), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.4, 1.4, 1.4) }));
+    scr.position.set(0, 1.27, 0.305); scr.rotation.x = -0.12; g.add(scr);
+    for (const [bx, c] of [[-0.15, "#ff4fa3"], [0.0, "#4fd8ff"], [0.15, "#ffd166"]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), M.glow(c, 2.6)); b.position.set(bx, 1.13, 0.4); g.add(b); }
+    const pool = lightPool("#ff4fa3", 1.2, 0.35); pool.position.set(0, 0.02, 0.7); g.add(pool);
+    let last = 0;
+    this.anims.push((t) => {
+      if (t - last < 0.06) return; last = t;
+      const c = screen.getContext("2d"), px = 80 + Math.sin(t * 1.7) * 50;
+      c.fillStyle = "#06021a"; c.fillRect(0, 0, 160, 128);
+      for (let i = 0; i < 20; i++) { c.fillStyle = "#ffffff55"; c.fillRect((i * 37) % 160, (i * 53 + t * 60) % 128, 2, 2); }
+      for (let i = 0; i < 3; i++) { const ex = (i * 53 + t * 40) % 180 - 10, ey = 20 + i * 18 + Math.sin(t * 3 + i) * 6; c.fillStyle = ["#ff4fa3", "#c792ea", "#7ee081"][i]; c.fillRect(ex, ey, 14, 10); }
+      c.fillStyle = "#ffd166"; for (let k = 0; k < 4; k++) c.fillRect(px - 1, 96 - ((t * 140 + k * 30) % 100), 2, 6);
+      c.fillStyle = "#4fd8ff"; c.beginPath(); c.moveTo(px, 98); c.lineTo(px - 10, 114); c.lineTo(px + 10, 114); c.fill();
+      tex.needsUpdate = true;
+    });
   }
 
+  // ---------------------------------------------------------------- the big screen
   paintScreen() {
-    // Logical 156x66; the canvas may be larger (4x in art mode) for sharp text.
+    // Logical 156x66, painted at 6x for sharp text.
     const c = this.screenCanvas, s = c.getContext("2d"), S = this.screen, CW = 156, CH = 66;
     s.setTransform(c.width / CW, 0, 0, c.height / CH, 0, 0);
-    s.imageSmoothingEnabled = false;
-    s.fillStyle = "#0a1630"; s.fillRect(0, 0, CW, CH);
-    s.font = "8px 'Press Start 2P', monospace"; s.textBaseline = "top";
+    const bg = s.createLinearGradient(0, 0, 0, CH); bg.addColorStop(0, "#0d1840"); bg.addColorStop(1, "#160a33");
+    s.fillStyle = bg; s.fillRect(0, 0, CW, CH);
+    s.textBaseline = "top";
+    const text = (str, x, y, color, size = 6, weight = 600) => { s.font = `${weight} ${size}px ${FONT}`; s.fillStyle = color; s.fillText(str, x, y); };
     if (S.mode === "idle") {
-      s.fillStyle = "#5ec8f2"; s.fillText("KULT CREATE", 34, 14);
-      s.fillStyle = "#8f86c8"; s.font = "6px 'Press Start 2P', monospace";
-      s.fillText(Math.floor(this.t * 1.5) % 2 ? "AWAITING BRIEF_" : "AWAITING BRIEF", 34, 34);
-      s.fillText(S.title ? S.title.slice(0, 22).toUpperCase() : "", 6, 52);
-      return;
-    }
-    if (S.image?.complete && S.image.naturalWidth) {
-      const ih = S.mode === "done" ? 58 : 44;
-      const iw = Math.round((S.image.naturalWidth / S.image.naturalHeight) * ih);
-      s.drawImage(S.image, S.mode === "done" ? 4 : CW - iw - 4, 4, Math.min(iw, 70), ih);
-    }
-    s.font = "6px 'Press Start 2P', monospace";
-    if (S.mode === "work") {
-      s.fillStyle = "#ffd166"; s.fillText("IN PRODUCTION", 5, 5);
-      s.fillStyle = "#e8e8f0";
-      (S.lines || []).slice(-4).forEach((l, i) => s.fillText(l.slice(0, 13).toUpperCase(), 5, 17 + i * 9));
-      s.fillStyle = "#1e2c55"; s.fillRect(5, 56, 146, 5);
-      s.fillStyle = "#7ee081"; s.fillRect(5, 56, Math.round(146 * Math.min(1, S.progress)), 5);
-    } else if (S.mode === "done") {
-      s.fillStyle = "#7ee081"; s.fillText("SHIPPED!", 82, 10);
-      s.fillStyle = "#e8e8f0";
-      const words = (S.title || "").toUpperCase().split(/\s+/);
-      let line = "", y = 26;
-      for (const w of words) { if ((line + w).length > 11) { s.fillText(line, 82, y); y += 9; line = ""; } line += `${w} `; }
-      s.fillText(line, 82, y);
-    } else if (S.mode === "failed") {
-      s.fillStyle = "#f78c6b"; s.fillText("BUILD FAILED", 30, 18);
-      s.fillStyle = "#e8e8f0"; s.fillText("CREDITS REFUNDED", 22, 34);
-    }
-    // scanlines
-    s.fillStyle = "rgba(0,0,0,0.18)";
-    for (let y = 0; y < CH; y += 2) s.fillRect(0, y, CW, c.width > CW ? 0.5 : 1);
-  }
-
-  // ---------------------------------------------------------------- furniture
-  drawDesk(g, x, y, id) {
-    const p = this.people.get(id);
-    const top = "#c8a27a";
-    this.box(g, x - 1, y - 0.45, 2, 0.9, 14, top);
-    // drawer + legs shading
-    const [lx, ly] = iso(x - 0.95, y + 0.45, 3);
-    g.fillStyle = "rgba(0,0,0,0.18)"; g.fillRect(lx, ly - 9, 2, 9);
-    // Monitor (back facing us) and its glow when working.
-    const working = p?.state === "working";
-    this.box(g, x + 0.2, y - 0.42, 0.7, 0.1, 11, "#2a2a3a", 14);
-    this.box(g, x + 0.5, y - 0.32, 0.1, 0.1, 2, "#2a2a3a", 14);
-    if (working) {
-      const [mx, my] = iso(x + 0.55, y - 0.42, 27);
-      g.fillStyle = `rgba(126,224,255,${0.25 + 0.12 * Math.sin(this.t * 6)})`;
-      g.fillRect(mx - 11, my - 3, 22, 3);
-    }
-    // Props per role.
-    const [px, py] = iso(x - 0.55, y + 0.1, 14);
-    if (id === "illustrator" || id === "artdirector" || id === "background") {
-      g.fillStyle = "#1c1c2c"; g.fillRect(px - 5, py - 2, 9, 4); g.fillStyle = "#7ee081"; g.fillRect(px - 4, py - 1, 1, 1);
-    } else if (id === "engineer" || id === "qa") {
-      g.fillStyle = "#e8e8f0"; g.fillRect(px - 3, py - 4, 5, 5); g.fillStyle = "#7a4a2a"; g.fillRect(px - 2, py - 3, 3, 1);
-    } else if (id === "playtester") {
-      g.fillStyle = "#333"; g.fillRect(px - 4, py - 2, 9, 4); g.fillStyle = "#ff7eb6"; g.fillRect(px - 3, py - 1, 1, 1); g.fillStyle = "#5ec8f2"; g.fillRect(px + 2, py - 1, 1, 1);
+      text("KULT CREATE", 22, 11, "#5ec8f2", 15, 700);
+      text(Math.floor(this.t * 1.5) % 2 ? "AWAITING BRIEF_" : "AWAITING BRIEF", 23, 32, "#a99cf0", 8);
+      text(S.title ? S.title.slice(0, 26).toUpperCase() : "", 23, 49, "#ff7eb6", 7.5, 700);
     } else {
-      g.fillStyle = "#fffbe6"; g.fillRect(px - 4, py - 2, 7, 4); g.fillStyle = "#ccc"; g.fillRect(px - 3, py - 1, 5, 1);
-    }
-  }
-
-  drawChair(g, x, y) {
-    this.box(g, x - 0.28, y + 0.1, 0.56, 0.5, 9, "#3d3560");
-    this.box(g, x - 0.3, y, 0.6, 0.1, 19, "#4b4275");
-  }
-
-  drawPodium(g) {
-    this.box(g, 5.7, 1.0, 0.9, 0.5, 18, "#3d3560");
-    const [x, y] = iso(6.15, 1.25, 18);
-    g.fillStyle = "#f2c14e"; g.fillRect(x - 3, y - 2, 6, 1);
-  }
-
-  drawPlant(g, x, y) {
-    this.box(g, x - 0.22, y - 0.22, 0.44, 0.44, 8, "#b5654a");
-    const [px, py] = iso(x, y, 8);
-    const sway = Math.round(Math.sin(this.t * 1.3 + x) * 1);
-    g.fillStyle = "#2f8f5b";
-    g.fillRect(px - 5 + sway, py - 14, 10, 10); g.fillRect(px - 7 + sway, py - 10, 14, 5);
-    g.fillStyle = "#47b877"; g.fillRect(px - 3 + sway, py - 16, 5, 6); g.fillRect(px + 2 + sway, py - 12, 4, 4);
-  }
-
-  drawCooler(g, x, y) {
-    this.box(g, x - 0.25, y - 0.25, 0.5, 0.5, 18, "#d8dce8");
-    const [px, py] = iso(x, y, 18);
-    g.fillStyle = "#7fc8f8"; g.fillRect(px - 4, py - 11, 8, 10);
-    g.fillStyle = "#b8e4ff"; g.fillRect(px - 3, py - 10, 2, 7);
-  }
-
-  drawCoffee(g, x, y) {
-    this.box(g, x - 0.5, y - 0.4, 1.1, 0.8, 16, "#5b4a8a");
-    const [px, py] = iso(x, y, 16);
-    g.fillStyle = "#222"; g.fillRect(px - 4, py - 12, 8, 11);
-    g.fillStyle = "#f78c6b"; g.fillRect(px - 2, py - 10, 1, 1);
-    if (Math.sin(this.t * 2) > 0) { g.fillStyle = "rgba(255,255,255,0.5)"; g.fillRect(px + 1, py - 16 - Math.floor((this.t * 6) % 4), 1, 2); }
-  }
-
-  // ---------------------------------------------------------------- people
-  drawPerson(g, p) {
-    const sitting = !p.isCeo && !p.walking && Math.hypot(p.x - p.desk[0], p.y - (p.desk[1] - 0.95)) < 0.05;
-    const [sx0, sy0] = iso(p.x, p.y, sitting ? 13 : 0);
-    const sx = Math.round(sx0), sy = Math.round(sy0);
-    const t = this.t;
-    const working = p.state === "working";
-    const bob = p.walking ? (Math.floor(t * 8) % 2) : working ? (Math.floor(t * 5 + p.phase) % 2 ? 0 : 1) * 0 : Math.round(Math.sin(t * 1.6 + p.phase) * 0.6);
-    const shirt = p.color, shirtD = shade(p.color, 0.7);
-    // shadow
-    if (!sitting) { g.fillStyle = "rgba(0,0,0,0.28)"; g.fillRect(sx - 6, sy - 1, 12, 3); }
-    let y = sy - bob;
-    // legs
-    if (!sitting) {
-      const step = p.walking ? Math.floor(t * 8) % 2 : 0;
-      g.fillStyle = "#2b2b45";
-      g.fillRect(sx - 4, y - 8 + (step ? 1 : 0), 3, 8 - (step ? 1 : 0));
-      g.fillRect(sx + 1, y - 8 + (step ? 0 : 1), 3, 8 - (step ? 0 : 1));
-      g.fillStyle = "#15151f"; g.fillRect(sx - 4, y - 1, 3, 1); g.fillRect(sx + 1, y - 1, 3, 1);
-      y -= 8;
-    }
-    // torso
-    g.fillStyle = shirt; g.fillRect(sx - 5, y - 10, 10, 10);
-    g.fillStyle = shirtD; g.fillRect(sx + 3, y - 10, 2, 10);
-    if (p.isCeo) { g.fillStyle = "#e8e8f0"; g.fillRect(sx - 1, y - 10, 2, 3); g.fillStyle = "#d1344b"; g.fillRect(sx - 1, y - 8, 2, 6); }
-    // arms
-    g.fillStyle = shirtD;
-    if (working && sitting) {
-      const a = Math.floor(t * 10 + p.phase) % 2;
-      g.fillRect(sx - 7, y - 9, 2, 6 + a); g.fillRect(sx + 5, y - 9, 2, 7 - a);
-      g.fillStyle = p.skin; g.fillRect(sx - 7, y - 3 + a, 2, 2); g.fillRect(sx + 5, y - 2 - a, 2, 2);
-    } else if (p.state === "done" && t - p.stateAt < 1.2) {
-      g.fillRect(sx - 7, y - 16, 2, 7); g.fillRect(sx + 5, y - 16, 2, 7); // arms up
-      g.fillStyle = p.skin; g.fillRect(sx - 7, y - 18, 2, 2); g.fillRect(sx + 5, y - 18, 2, 2);
-    } else {
-      const swing = p.walking ? (Math.floor(t * 8) % 2 ? 1 : -1) : 0;
-      g.fillRect(sx - 7, y - 9 + swing, 2, 7); g.fillRect(sx + 5, y - 9 - swing, 2, 7);
-      g.fillStyle = p.skin; g.fillRect(sx - 7, y - 2 + swing, 2, 2); g.fillRect(sx + 5, y - 2 - swing, 2, 2);
-    }
-    // head
-    const hy = y - 18;
-    g.fillStyle = p.skin; g.fillRect(sx - 4, hy, 8, 8);
-    g.fillStyle = shade(p.skin.startsWith("#") ? p.skin : "#e0ac69", 0.85); g.fillRect(sx + 2, hy + 1, 2, 7);
-    // face (facing viewer unless walking away up the screen)
-    const awayFromViewer = p.walking && p.path[0] && (p.path[0][0] + p.path[0][1]) < (p.x + p.y) - 0.01;
-    const blink = (t + p.phase) % 4.2 < 0.12;
-    if (!awayFromViewer) {
-      g.fillStyle = "#1a1033";
-      if (!blink) { g.fillRect(sx - 2, hy + 3, 1, 2); g.fillRect(sx + 1, hy + 3, 1, 2); }
-      else { g.fillRect(sx - 2, hy + 4, 1, 1); g.fillRect(sx + 1, hy + 4, 1, 1); }
-      if (p.state === "error") { g.fillRect(sx - 1, hy + 6, 2, 1); }
-      else if (p.state === "done") { g.fillStyle = "#b5444b"; g.fillRect(sx - 1, hy + 6, 3, 1); }
-    }
-    if (working) { g.fillStyle = "rgba(126,224,255,0.22)"; g.fillRect(sx - 4, hy + 2, 8, 6); }
-    // hair
-    g.fillStyle = p.hair;
-    const hs = p.hairStyle;
-    g.fillRect(sx - 4, hy - 2, 8, 3);
-    if (awayFromViewer) g.fillRect(sx - 4, hy, 8, 7);
-    if (hs === 1) { g.fillRect(sx - 5, hy - 1, 2, 9); g.fillRect(sx + 3, hy - 1, 2, 9); }
-    if (hs === 2) g.fillRect(sx - 2, hy - 5, 4, 3);
-    if (hs === 3) { g.fillRect(sx - 4, hy - 4, 2, 2); g.fillRect(sx, hy - 4, 2, 2); g.fillRect(sx + 3, hy - 3, 1, 1); }
-    if (hs === 4) { g.fillStyle = shade(p.color, 0.9); g.fillRect(sx - 5, hy - 3, 10, 3); g.fillRect(sx - 1 + 4 * p.facing, hy, 4, 1); }
-    if (p.isCeo) { // crown
-      g.fillStyle = "#f2c14e";
-      g.fillRect(sx - 4, hy - 5, 8, 2); g.fillRect(sx - 4, hy - 7, 2, 2); g.fillRect(sx - 1, hy - 8, 2, 3); g.fillRect(sx + 2, hy - 7, 2, 2);
-      g.fillStyle = "#d1344b"; g.fillRect(sx - 1, hy - 5, 2, 1);
-    }
-  }
-
-  // ---------------------------------------------------------------- custom art
-  // Uses the imported art (public/office/art/manifest.json, built by
-  // scripts/import-art.mjs). The background's measured floor corners give the
-  // grid projection, so desks, people and effects land on the painted room.
-  // Anything without a sprite (e.g. the CEO until delivered) is drawn as before.
-  useArt(manifest, images, urlOf = (f) => `art/${f}`) {
-    const bg = manifest.background;
-    if (!bg || !images[bg.file]) return false;
-    const pr = bg.projection;
-    iso = (gx, gy, z = 0) => [pr.origin[0] + gx * pr.ex[0] + gy * pr.ey[0], pr.origin[1] + gx * pr.ex[1] + gy * pr.ey[1] - z * pr.zScale];
-    const first = !this.art;
-    this.art = { manifest, images, bg, img: images[bg.file], urlOf, loading: new Set() };
-    CEO_HOME = this.gridAt(bg.rugCenter);
-    if (first) {
-      // Keep the desk rows off the CEO rug in the painted room.
-      for (const d of Object.values(DESKS)) d[1] += 0.8;
-      AISLES = [1.7, 6.6, 10.4];
-    }
-    for (const p of this.people.values()) if (!p.isCeo && p.desk && !p.path.length) [p.x, p.y] = this.seatOf(p.desk);
-    for (const p of this.people.values()) if (p.isCeo && !p.path.length) { p.x = CEO_HOME[0]; p.y = CEO_HOME[1]; }
-    this.W = manifest.canvas.width; this.H = manifest.canvas.height;
-    // Draw at 2x: the painted room is native at that size and text stays sharp.
-    this.dpr = 2;
-    this.canvas.width = this.W * this.dpr; this.canvas.height = this.H * this.dpr;
-    this.ctx.imageSmoothingEnabled = false;
-    this.screenCanvas.width = 156 * 4; this.screenCanvas.height = 66 * 4;
-    this.neonCanvas = document.createElement("canvas");
-    this.neonCanvas.width = 480; this.neonCanvas.height = 300;
-    return true;
-  }
-
-  // Canvas pixels per office pixel (set to match the screen; see app.js fit).
-  setPixelScale(k) {
-    if (!this.art || !(k > 0)) return;
-    const w = Math.round(this.W * k), h = Math.round(this.H * k);
-    if (w === this.canvas.width && h === this.canvas.height) return;
-    this.dpr = w / this.W;
-    this.canvas.width = w; this.canvas.height = h;
-  }
-
-  // Head-and-shoulders crop of an employee's sprite (for the dashboard).
-  portraitOf(id) {
-    const c = this.art?.manifest.characters?.[id], img = c && this.art.images[c.file];
-    if (!img) return null;
-    const [fw, fh] = c.frame, probe = document.createElement("canvas");
-    probe.width = fw; probe.height = fh;
-    const pg = probe.getContext("2d");
-    pg.drawImage(img, 0, 0, fw, fh, 0, 0, fw, fh);
-    const alpha = pg.getImageData(0, 0, fw, fh).data;
-    let top = 0;
-    while (top < fh && ![...Array(fw).keys()].some((x) => alpha[(top * fw + x) * 4 + 3] > 0)) top++;
-    const size = Math.round(fw * 0.82), out = document.createElement("canvas");
-    out.width = size; out.height = size;
-    const g = out.getContext("2d");
-    g.imageSmoothingEnabled = false;
-    g.drawImage(img, Math.round((fw - size) / 2), top, size, size, 0, 0, size, size);
-    return out;
-  }
-
-  // Canvas point -> grid (inverse of the floor projection, z = 0).
-  gridAt([px, py]) {
-    const pr = this.art.bg.projection, dx = px - pr.origin[0], dy = py - pr.origin[1];
-    const det = pr.ex[0] * pr.ey[1] - pr.ey[0] * pr.ex[1];
-    return [(dx * pr.ey[1] - pr.ey[0] * dy) / det, (pr.ex[0] * dy - dx * pr.ex[1]) / det];
-  }
-
-  quadCenter(q) { return [(q.tl[0] + q.tr[0] + q.bl[0] + q.br[0]) / 4, (q.tl[1] + q.tr[1] + q.bl[1] + q.br[1]) / 4]; }
-
-  // Draws an image into a wall parallelogram (tl, tr, bl corners).
-  drawInQuad(g, img, q, smooth = false) {
-    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-    g.save();
-    g.transform((q.tr[0] - q.tl[0]) / w, (q.tr[1] - q.tl[1]) / w, (q.bl[0] - q.tl[0]) / h, (q.bl[1] - q.tl[1]) / h, q.tl[0], q.tl[1]);
-    g.imageSmoothingEnabled = smooth;
-    if (smooth) g.imageSmoothingQuality = "high";
-    g.drawImage(img, 0, 0);
-    g.restore();
-  }
-
-  // A smaller parallelogram inside q (fractions of its width/height).
-  insetQuad(q, ix, iy) {
-    const P = (u, v) => this.quadPoint(q, u, v);
-    return { tl: P(ix, iy), tr: P(1 - ix, iy), bl: P(ix, 1 - iy), br: P(1 - ix, 1 - iy) };
-  }
-
-  // Blinking neon "KULT CREATE" on the painted sign panel.
-  paintNeon() {
-    const c = this.neonCanvas, s = c.getContext("2d"), t = this.t;
-    s.setTransform(1, 0, 0, 1, 0, 0);
-    s.clearRect(0, 0, c.width, c.height);
-    s.fillStyle = "#16112e"; s.fillRect(0, 0, c.width, c.height);
-    // Each word buzzes on its own: steady, with rare quick flickers.
-    const flick = (seed) => { const k = Math.sin(t * 17 + seed) + Math.sin(t * 5.3 + seed * 3); return k < -1.75 ? 0.15 : k < -1.55 ? 0.6 : 1; };
-    const pulse = 0.85 + 0.15 * Math.sin(t * 2.4);
-    const word = (text, y, size, color, seed) => {
-      const a = flick(seed) * pulse;
-      s.font = `${size}px "Press Start 2P", monospace`;
-      s.textAlign = "center"; s.textBaseline = "middle";
-      s.globalAlpha = a;
-      s.shadowColor = color; s.shadowBlur = 28 * a;
-      s.fillStyle = color; s.fillText(text, c.width / 2, y);
-      s.shadowBlur = 8 * a; s.fillStyle = "#ffffff"; s.globalAlpha = a * 0.55; s.fillText(text, c.width / 2, y);
-      s.globalAlpha = 1; s.shadowBlur = 0;
-    };
-    word("KULT", c.height * 0.33, 86, "#ff4fa3", 1.1);
-    word("CREATE", c.height * 0.72, 62, "#3fe3ff", 4.7);
-  }
-
-  // Point at (u, v) in 0..1 board space of a wall parallelogram.
-  quadPoint(q, u, v) { return [q.tl[0] + u * (q.tr[0] - q.tl[0]) + v * (q.bl[0] - q.tl[0]), q.tl[1] + u * (q.tr[1] - q.tl[1]) + v * (q.bl[1] - q.tl[1])]; }
-
-  artSprite(kind, name) {
-    const m = this.art.manifest[kind]?.[name];
-    const img = m && this.art.images[m.file];
-    return img ? { m, img } : null;
-  }
-
-  drawArt() {
-    const g = this.ctx, A = this.art;
-    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    g.clearRect(0, 0, this.W, this.H); // the room is cut out: the page shows around it
-    g.imageSmoothingEnabled = false;
-    // The painted room samples smoothly at any screen scale; sprites stay sharp.
-    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
-    g.drawImage(A.img, 0, 0, this.W, this.H);
-    g.imageSmoothingEnabled = false;
-    // Live wall content, painted at high resolution.
-    this.paintScreen();
-    this.drawInQuad(g, this.screenCanvas, A.bg.screen, true);
-    if (A.bg.neon) { this.paintNeon(); this.drawInQuad(g, this.neonCanvas, this.insetQuad(A.bg.neon, 0.07, 0.1), true); }
-    // The CEO's portrait: the agent's own image if it has one, else its archetype art.
-    const ceoPortrait = this.ceoArt()?.m.portrait && A.images[this.ceoArt().m.portrait];
-    const portrait = this.portrait?.complete && this.portrait.naturalWidth ? this.portrait : ceoPortrait;
-    if (portrait) this.drawInQuad(g, portrait, A.bg.portrait, true);
-    this.notes.forEach((n, i) => {
-      const col = i % 6, row = Math.floor(i / 6), u = 0.06 + col * 0.155, v = 0.1 + row * 0.22;
-      this.poly(g, [this.quadPoint(A.bg.whiteboard, u, v), this.quadPoint(A.bg.whiteboard, u + 0.12, v), this.quadPoint(A.bg.whiteboard, u + 0.12, v + 0.17), this.quadPoint(A.bg.whiteboard, u, v + 0.17)], n.color);
-    });
-    // Depth-sorted scene.
-    const items = [];
-    for (const [x, y] of Object.values(DESKS)) items.push({ k: x + y + 0.5, draw: () => this.artDesk(g, x, y) });
-    for (const p of this.people.values()) items.push({ k: p.x + p.y + 0.02, draw: () => this.artPerson(g, p) });
-    for (const [name, x, y] of [["podium", 6.15, 1.1], ["plant", 0.7, 11.3], ["plant", 13.3, 0.7], ["cooler", 0.6, 0.6], ["coffee", 13.0, 10.8]]) {
-      items.push({ k: x + y, draw: () => this.artProp(g, name, x, y) });
-    }
-    items.sort((a, b) => a.k - b.k);
-    for (const it of items) it.draw();
-    this.drawSteam(g, 13.0, 10.8);
-    this.drawStatusIcons(g);
-    this.drawParticles(g);
-    if (!this.lightsOn) { g.fillStyle = "rgba(8,6,24,0.55)"; g.fillRect(0, 0, this.W, this.H); }
-  }
-
-  artDesk(g, x, y) {
-    const s = this.artSprite("sprites", "desk");
-    if (!s) { this.drawDesk(g, x, y); return; }
-    const left = iso(x - 1, y + 0.45), right = iso(x + 1, y - 0.45), front = iso(x + 1, y + 0.45);
-    const cx = (left[0] + right[0]) / 2;
-    g.drawImage(s.img, Math.round(cx - s.m.w / 2), Math.round(front[1] - s.m.h + 2));
-    // Monitor glow while its employee works.
-    const p = [...this.people.values()].find((q) => q.desk && q.desk[0] === x && q.desk[1] === y);
-    if (p?.state === "working") {
-      g.fillStyle = `rgba(126,224,255,${0.18 + 0.08 * Math.sin(this.t * 6)})`;
-      g.fillRect(Math.round(cx - s.m.w * 0.36), Math.round(front[1] - s.m.h + 2), Math.round(s.m.w * 0.34), Math.round(s.m.h * 0.42));
-    }
-  }
-
-  artProp(g, name, x, y) {
-    const s = this.artSprite("sprites", name);
-    if (!s) return;
-    const [fx, fy] = iso(x, y), base = iso(x + 0.3, y + 0.3)[1];
-    g.drawImage(s.img, Math.round(fx - s.m.w / 2), Math.round(base - s.m.h + 1));
-  }
-
-  // Happy: for ~3 s after finishing a task, or while the team celebrates.
-  isHappy(p) { return (p.state === "done" && this.t - p.stateAt < 3) || (p.celebrateUntil ?? 0) > this.t; }
-
-  // The whole team (and the CEO) cheers, slightly out of step.
-  celebrate(seconds = 5) {
-    let i = 0;
-    for (const p of this.people.values()) { p.celebrateUntil = this.t + seconds + (i++ % 4) * 0.15; p.celebrateFrom = this.t + (i % 3) * 0.12; }
-  }
-
-  // Pixel puffs of steam rising from the coffee machine.
-  drawSteam(g, x, y) {
-    const s = this.artSprite("sprites", "coffee");
-    if (!s) return;
-    const [fx] = iso(x, y), base = iso(x + 0.3, y + 0.3)[1];
-    const ex = Math.round(fx - s.m.w * 0.12), ey = Math.round(base - s.m.h + 4);
-    for (let i = 0; i < 8; i++) {
-      const k = (this.t * 0.4 + i / 8) % 1;               // 0 at the spout -> 1 at the top
-      const px = Math.round(ex + Math.sin(k * 6 + i * 1.7) * 3 + k * 3), py = Math.round(ey - k * 26);
-      const size = k < 0.3 ? 2 : 3;
-      g.fillStyle = `rgba(240,236,255,${(0.75 * (1 - k) ** 0.8).toFixed(3)})`;
-      g.fillRect(px, py, size, size);
-      if (k > 0.45) g.fillRect(px + size, py + 1, 2, 2);   // puffs widen as they rise
-    }
-  }
-
-  artFrame(p) {
-    if (p.walking) return 3;
-    if (this.isHappy(p)) return 2;
-    if (p.state === "working") return Math.floor(this.t * 3 + p.phase) % 4 === 0 ? 0 : 1;
-    // Idle: every few seconds glance at the screen and type for a moment.
-    p.fidgetAt ??= this.t + 2 + ((p.phase * 7) % 6);
-    if (this.t > p.fidgetAt + 1.1) p.fidgetAt = this.t + 4 + Math.random() * 8;
-    if (this.t > p.fidgetAt) return Math.floor(this.t * 6) % 2 ? 1 : 0;
-    return 0;
-  }
-
-  // Only the studio's own archetype is downloaded, the first time it's needed.
-  ceoArt() {
-    const m = this.art?.manifest.ceo?.[this.ceoArchetype] || this.art?.manifest.ceo?.hybrid;
-    if (!m) return null;
-    for (const f of [m.file, m.portrait]) {
-      if (!f || this.art.images[f] || this.art.loading.has(f)) continue;
-      this.art.loading.add(f);
-      const img = new Image();
-      img.onload = () => { this.art.images[f] = img; };
-      img.src = this.art.urlOf(f);
-    }
-    const img = this.art.images[m.file];
-    return img ? { m, img } : null;
-  }
-
-  // The CEO sprite (stored at 2x, drawn at half size): idle with breathing,
-  // a glance now and then, a walk cycle, and a hop when the team ships.
-  artCeo(g, p, { m, img }) {
-    const [fx, fy] = iso(p.x, p.y), s = m.scale || 1;
-    const [fw, fh] = m.frame, walkFrames = m.poses.length - 2;
-    let frame = 0;
-    if (p.walking) frame = 2 + (Math.floor(this.t * 10) % walkFrames);
-    else {
-      p.fidgetAt ??= this.t + 3 + ((p.phase * 5) % 4);
-      if (this.t > p.fidgetAt + 1.4) p.fidgetAt = this.t + 5 + Math.random() * 7;
-      if (this.t > p.fidgetAt) frame = 1;
-    }
-    const hop = !p.walking && this.isHappy(p) ? Math.floor((this.t - (p.celebrateFrom ?? p.stateAt)) * 7) % 2 * 2 : 0;
-    const breath = !p.walking && Math.sin(this.t * 1.7 + p.phase) > 0.2 ? 0.5 : 0;
-    const w = fw * s, h = fh * s, x = Math.round(fx - w / 2), y = Math.round(fy - h + 1 - hop);
-    g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(fx, fy, w * 0.32, 3, 0, 0, Math.PI * 2); g.fill();
-    g.save();
-    const facesRight = m.walkFaces === "right";
-    if (p.walking && (facesRight ? p.facing < 0 : p.facing > 0)) { g.translate(Math.round(fx) * 2, 0); g.scale(-1, 1); }
-    g.imageSmoothingEnabled = false;
-    g.drawImage(img, frame * fw, 0, fw, fh, x, y, w, h);
-    if (breath) { const split = Math.round(fh * 0.55); g.drawImage(img, frame * fw, 0, fw, split, x, y - breath, w, split * s); }
-    g.restore();
-  }
-
-  artPerson(g, p) {
-    if (p.isCeo) { const ceo = this.ceoArt(); if (ceo) { this.artCeo(g, p, ceo); return; } }
-    const c = this.art.manifest.characters?.[p.id], img = c && this.art.images[c.file];
-    const [fx, fy] = iso(p.x, p.y);
-    if (!img) { // no sprite yet: the drawn character, scaled to the art
-      g.save(); g.translate(fx, fy); g.scale(1.8, 1.8); g.translate(-fx, -fy);
-      this.drawPerson(g, p);
-      g.restore();
-      return;
-    }
-    const [fw, fh] = c.frame, frame = this.artFrame(p);
-    const standing = frame >= 2 || p.isCeo;
-    if (standing) { g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(fx, fy, fw * 0.3, 3, 0, 0, Math.PI * 2); g.fill(); }
-    const bob = p.walking ? Math.floor(this.t * 8) % 2 : 0;
-    const hop = frame === 2 ? (Math.floor((this.t - (p.celebrateFrom ?? p.stateAt)) * 7) % 2) : 0;
-    // Breathing: the upper body rises half a pixel (one screen pixel at 2x)
-    // on each breath; everyone breathes at their own pace.
-    const breath = !p.walking && Math.sin(this.t * (1.9 + (p.phase % 0.6)) + p.phase) > 0.2 ? 0.5 : 0;
-    const x = Math.round(fx - fw / 2), y = Math.round(fy - fh + 1 - bob - hop), split = Math.round(fh * 0.58);
-    g.save();
-    if (p.walking && p.facing > 0) { g.translate(Math.round(fx) * 2, 0); g.scale(-1, 1); } // walk frame faces left
-    g.drawImage(img, frame * fw, 0, fw, fh, x, y, fw, fh);
-    if (breath) g.drawImage(img, frame * fw, 0, fw, split, x, y - breath, fw, split); // no gap: drawn over the full frame
-    g.restore();
-  }
-
-  artAnchor(p) {
-    const [fx, fy] = iso(p.x, p.y);
-    if (p.isCeo && this.ceoArt()) { const { m } = this.ceoArt(); return [fx, fy - m.frame[1] * (m.scale || 1) - 2]; }
-    const c = this.art.manifest.characters?.[p.id];
-    return c ? [fx, fy - c.frame[1] - 2] : [fx, fy - 58];
-  }
-
-  artHit(x, y) {
-    let best = null;
-    for (const p of this.people.values()) {
-      const c = this.art.manifest.characters?.[p.id], [fx, fy] = iso(p.x, p.y);
-      const w = c ? c.frame[0] * 0.7 : 24, h = c ? c.frame[1] : 56; // the CEO is ~56 tall either way
-      if (x >= fx - w / 2 && x <= fx + w / 2 && y >= fy - h && y <= fy) if (!best || p.y > best.y) best = p;
-    }
-    return best;
-  }
-
-  drawStatusIcons(g) {
-    for (const p of this.people.values()) {
-      const [ax, ay] = this.anchor(p.id).map(Math.round);
-      const t = this.t, age = t - p.stateAt;
-      if (p.state === "working") {
-        for (let i = 0; i < 3; i += 1) {
-          const on = Math.floor(t * 4) % 4 > i;
-          g.fillStyle = on ? "#ffffff" : "rgba(255,255,255,0.3)";
-          g.fillRect(ax - 5 + i * 4, ay - 4, 2, 2);
-        }
-      } else if (this.art && (p.state === "done" && age < 5 || p.state === "error") && this.artSprite("icons", p.state)) {
-        const ic = this.artSprite("icons", p.state), w = 20, h = Math.round((ic.m.h / ic.m.w) * w);
-        const lift = p.state === "done" ? Math.min(6, age * 12) : 0;
-        g.drawImage(ic.img, Math.round(ax - w / 2), Math.round(ay - h - lift), w, h);
-      } else if (p.state === "done" && age < 5) {
-        const lift = Math.min(6, age * 12);
-        g.fillStyle = "#1f6b3c"; g.fillRect(ax - 5, ay - 9 - lift, 11, 9);
-        g.fillStyle = "#7ee081";
-        g.fillRect(ax - 3, ay - 5 - lift, 2, 2); g.fillRect(ax - 1, ay - 3 - lift, 2, 2); g.fillRect(ax + 1, ay - 5 - lift, 2, 2); g.fillRect(ax + 3, ay - 7 - lift, 2, 2);
-      } else if (p.state === "error") {
-        g.fillStyle = "#d1344b"; g.fillRect(ax - 3, ay - 12, 7, 11);
-        g.fillStyle = "#fff"; g.fillRect(ax - 1, ay - 10, 2, 5); g.fillRect(ax - 1, ay - 4, 2, 2);
-      } else if (p.state === "waiting") {
-        g.fillStyle = "#ffd166"; g.fillRect(ax - 2, ay - 11, 5, 2); g.fillRect(ax + 2, ay - 9, 2, 3); g.fillRect(ax, ay - 6, 2, 2); g.fillRect(ax, ay - 3, 2, 2);
+      if (S.image?.complete && S.image.naturalWidth) {
+        const ih = S.mode === "done" ? 58 : 44;
+        const iw = Math.round((S.image.naturalWidth / S.image.naturalHeight) * ih);
+        s.drawImage(S.image, S.mode === "done" ? 4 : CW - Math.min(iw, 70) - 4, 4, Math.min(iw, 70), ih);
+      }
+      if (S.mode === "work") {
+        text("IN PRODUCTION", 5, 4, "#ffd166", 7, 700);
+        (S.lines || []).slice(-4).forEach((l, i) => text(l.slice(0, 18).toUpperCase(), 5, 16 + i * 9, "#e8e8f0", 6));
+        s.fillStyle = "#1e2c55"; s.beginPath(); s.roundRect(5, 56, 146, 5, 2.5); s.fill();
+        s.fillStyle = "#7ee081"; s.beginPath(); s.roundRect(5, 56, Math.max(5, Math.round(146 * Math.min(1, S.progress))), 5, 2.5); s.fill();
+      } else if (S.mode === "done") {
+        text("SHIPPED!", 82, 8, "#7ee081", 9, 700);
+        const words = (S.title || "").toUpperCase().split(/\s+/);
+        let line = "", y = 24;
+        for (const w of words) { if ((line + w).length > 13) { text(line, 82, y, "#e8e8f0", 6.5); y += 9; line = ""; } line += `${w} `; }
+        text(line, 82, y, "#e8e8f0", 6.5);
+      } else if (S.mode === "failed") {
+        text("BUILD FAILED", 36, 18, "#f78c6b", 9, 700);
+        text("CREDITS REFUNDED", 38, 34, "#e8e8f0", 6.5);
       }
     }
+    // Scanlines.
+    s.fillStyle = "rgba(0,0,0,0.14)";
+    for (let y = 0; y < CH; y += 1.5) s.fillRect(0, y, CW, 0.4);
   }
+}
 
-  drawParticles(g) {
-    for (const q of this.particles) {
-      const k = (this.t - q.t0) / q.dur;
-      if (q.kind === "packet") {
-        const x = q.sx + (q.tx - q.sx) * k, y = q.sy + (q.ty - q.sy) * k - Math.sin(k * Math.PI) * 40;
-        g.fillStyle = q.color; g.fillRect(Math.round(x) - 2, Math.round(y) - 2, 4, 4);
-        g.fillStyle = "rgba(255,255,255,0.7)"; g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 1, 1);
-      } else {
-        const tt = this.t - q.t0;
-        const x = q.x + q.vx * tt, y = q.y + q.vy * tt + 60 * tt * tt;
-        g.fillStyle = q.color; g.fillRect(Math.round(x), Math.round(y), 2, Math.floor(tt * 10) % 2 ? 2 : 1);
-      }
-    }
-  }
+// A little painting in progress on each art desk's tablet.
+function sketchTexture(id) {
+  return canvasTex(256, 168, (g, W, H) => {
+    const sky = g.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, id === "background" ? "#1b2a6b" : "#2a1650"); sky.addColorStop(1, id === "background" ? "#ff7eb6" : "#5ec8f2");
+    g.fillStyle = sky; g.fillRect(0, 0, W, H);
+    if (id === "background") { g.fillStyle = "#140c30"; for (let i = 0; i < 7; i++) { const h = 40 + ((i * 37) % 70); g.fillRect(i * 38, H - h, 30, h); } }
+    else { g.fillStyle = "#ffd166"; g.beginPath(); g.arc(W / 2, H / 2, 40, 0, Math.PI * 2); g.fill(); g.fillStyle = "#140c30"; g.fillRect(W / 2 - 18, H / 2 - 10, 10, 12); g.fillRect(W / 2 + 8, H / 2 - 10, 10, 12); }
+  });
 }
