@@ -91,6 +91,8 @@ npm test
 
 `/office/?demo=1` runs the whole office offline with a scripted production,
 with no wallet or server calls. It is useful for demos and design work.
+`DEMO_MODE=1` sends every visitor there (`?demo=0` still opens the real office),
+and Kult World in demo mode opens it with `KultCreate.open({ demo: true })`.
 
 ## Embedding in Kult World (Privy)
 

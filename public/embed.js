@@ -50,7 +50,8 @@
     opts = options || {};
     if (typeof opts.getSession !== "function") throw new Error("KultCreate.open needs getSession()");
     frame = document.createElement("iframe");
-    frame.src = HOST + "/office/?embed=1";
+    // demo: true opens the office's offline demo (Kult World in demo mode).
+    frame.src = HOST + "/office/?embed=1" + (opts.demo ? "&demo=1" : "");
     frame.title = "Kult Create";
     frame.allow = "autoplay; fullscreen; clipboard-write";
     frame.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;z-index:2147483000;background:#0b0717";

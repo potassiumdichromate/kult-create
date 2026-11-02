@@ -33,6 +33,9 @@ export const config = {
   sessionDays: num("SESSION_DAYS", 7),
   // Origins allowed to embed the office (Kult World) and call the API.
   allowedOrigins: env("ALLOWED_ORIGINS", "*").split(",").map((s) => s.trim()).filter(Boolean),
+  // DEMO_MODE=1 opens the office in its offline demo (?demo=1) for every
+  // visitor; ?demo=0 still reaches the real one.
+  demo: ["1", "true", "on", "yes", "fresh"].includes(env("DEMO_MODE", "").toLowerCase()),
 
   // Storage: MongoDB when MONGODB_URI is set, otherwise a JSON file (dev / single instance).
   mongoUri: env("MONGODB_URI", ""),

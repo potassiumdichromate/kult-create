@@ -346,6 +346,10 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
   app.get(["/office/", "/office/index.html"], (req, res) => {
     // Its links are relative: /office must become /office/ (routing isn't strict).
     if (req.path === "/office") { res.redirect(301, `/office/${req.originalUrl.slice("/office".length)}`); return; }
+    if (config.demo && req.query.demo === undefined) {
+      const q = new URLSearchParams(req.originalUrl.split("?")[1] || ""); q.set("demo", "1");
+      res.set("Cache-Control", "no-store").redirect(302, `${req.path}?${q}`); return;
+    }
     res.set("Cache-Control", "no-store").type("html").send(officePage);
   });
   const versioned = express.static(office, { setHeaders: (r) => r.set("Cache-Control", "public, max-age=31536000, immutable") });
