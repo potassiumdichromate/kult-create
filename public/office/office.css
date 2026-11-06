@@ -521,3 +521,24 @@ h2.display { letter-spacing: 0.1em; }
 /* The hidden mode radios sit inside their card; full-width they widened the page on phones. */
 .mode { position: relative; }
 .mode input { width: 1px; height: 1px; margin: 0; }
+
+/* ================================================================ v3.1: a left rail instead of the bottom dock
+   Desktop: the views are a slim rail of icon tiles on the left, the action card
+   spans the full width between the rail and the feed, and the feed runs the
+   full height. Phones keep the bottom tab bar. */
+:root { --rail-w: 82px; }
+@media (min-width: 861px) {
+  #sidebar.panel {
+    left: var(--gap); right: auto; top: calc(var(--gap) * 2 + var(--hud-h)); bottom: auto; transform: none;
+    flex-direction: column; width: var(--rail-w); padding: 8px 6px; gap: 2px; border-radius: 22px;
+  }
+  .nav-item { width: 100%; padding: 8px 2px 7px; }
+  #feed { bottom: var(--gap); }
+  #console { left: calc(var(--gap) * 2 + var(--rail-w)); right: calc(var(--feed-w) + var(--gap) * 2); bottom: var(--gap); width: auto; transform: none; }
+  .view-panel, #dashboard { left: calc(var(--gap) * 2 + var(--rail-w)); bottom: var(--gap); }
+}
+@media (min-width: 861px) and (max-width: 1180px) { .nav-item { width: 100%; } }
+/* The rail sits centred in the space between the top bar and the bottom edge. */
+@media (min-width: 861px) {
+  #sidebar.panel { top: calc(var(--gap) * 2 + var(--hud-h)); bottom: var(--gap); height: fit-content; margin: auto 0; }
+}

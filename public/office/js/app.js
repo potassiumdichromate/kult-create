@@ -54,12 +54,15 @@ function fit() {
 function stageInsets(box) {
   if (getComputedStyle($("stage")).position !== "fixed") return { top: 0, right: 0, bottom: 0, left: 0 };
   const r = (id) => { const n = $(id); return n && !n.hidden && n.getClientRects().length ? n.getBoundingClientRect() : null; };
-  const hud = r("hud"), feed = r("feed"), lows = [r("console"), r("sidebar")].filter(Boolean).map((x) => x.top);
+  const hud = r("hud"), feed = r("feed"), con = r("console"), nav = r("sidebar");
+  // The nav is a rail on the left on desktop (a bar along the bottom on phones).
+  const rail = nav && nav.right < box.left + box.width / 3 ? nav : null;
+  const lows = [con, !rail ? nav : null].filter(Boolean).map((x) => x.top);
   return {
     top: hud ? hud.bottom - box.top + 6 : 0,
     right: feed ? box.right - feed.left + 6 : 0,
     bottom: lows.length ? box.bottom - Math.min(...lows) + 6 : 0,
-    left: 16
+    left: rail ? rail.right - box.left + 6 : 16
   };
 }
 {
