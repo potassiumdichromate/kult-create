@@ -357,3 +357,13 @@ test("the OKX gateway finds a studio by wallet and runs a paid build for it", as
   assert.equal((await gw("GET", `/gateway/studios/agy_other/productions/${pid}`)).status, 404);
   config.gateway.key = "";
 });
+
+test("a Creator Studio play path becomes a full link to the Creator Studio site", async () => {
+  const { studioLink, withStudioLink } = await import("../src/services.js");
+  const { config } = await import("../src/config.js");
+  assert.equal(studioLink("/play?gameId=g1"), `${config.creatorStudioApp}/play?gameId=g1`);
+  assert.equal(studioLink("https://studio/play?gameId=g1"), "https://studio/play?gameId=g1");
+  assert.equal(studioLink(null), null);
+  assert.deepEqual(withStudioLink({ gameId: "g1", status: "published", playUrl: "/play?gameId=g1" }).playUrl, `${config.creatorStudioApp}/play?gameId=g1`);
+  assert.equal(withStudioLink(null), null);
+});

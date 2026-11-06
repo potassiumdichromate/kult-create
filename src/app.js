@@ -6,7 +6,7 @@ import { z } from "zod";
 import { config, ROOT } from "./config.js";
 import { createChallenge, verifyChallenge, issueToken, readToken, requireAuth, normalize } from "./auth.js";
 import * as defaultChain from "./chain.js";
-import { creatorStudio as defaultStudio, computeLayer as defaultCompute } from "./services.js";
+import { creatorStudio as defaultStudio, computeLayer as defaultCompute, studioLink, withStudioLink } from "./services.js";
 import { EMPLOYEES } from "./employees.js";
 import { arenaHealth, arenaEnabled, agentByToken } from "./arena.js";
 import { verifyPrivy, privyConfigured } from "./privy.js";
@@ -32,7 +32,7 @@ const publishSchema = z.object({ publish: z.boolean().optional().default(true) }
 // Production as the office sees it (no internal bookkeeping).
 const publicProduction = (p) => p && ({
   id: p.id, kind: p.kind, parentId: p.parentId, mode: p.mode, brief: p.brief, cost: p.cost, status: p.status,
-  error: p.error ?? null, refunded: p.refunded ?? 0, result: p.result, published: p.published,
+  error: p.error ?? null, refunded: p.refunded ?? 0, result: p.result, published: withStudioLink(p.published),
   createdAt: p.createdAt, finishedAt: p.finishedAt, timeline: p.timeline ?? []
 });
 
@@ -236,7 +236,7 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
         rank: i + 1,
         mine: g.studio?.agencyId === req.agency.id,
         playUrl: g.computeRunId ? `${config.computeLayer.url}/play/${encodeURIComponent(g.computeRunId)}` : g.playUrl,
-        livePageUrl: g.playUrl ?? null
+        livePageUrl: studioLink(g.playUrl)
       }))
     });
   }));
@@ -281,7 +281,7 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     const { publish } = publishSchema.parse(req.body ?? {});
     const p = req.production;
     if (p.status !== "complete") throw Object.assign(new Error("Only a finished game can be published"), { status: 409 });
-    if (p.published?.status === "published" || (p.published && !publish)) { res.json({ published: p.published }); return; }
+    if (p.published?.status === "published" || (p.published && !publish)) { res.json({ published: withStudioLink(p.published) }); return; }
     const a = req.agency;
     const out = await studio.importRun({
       runId: p.runId,
@@ -293,7 +293,7 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     const published = { gameId: out.gameId, playUrl: out.playUrl, status: out.status || (publish ? "published" : "draft"), at: Date.now() };
     await store.update("productions", p.id, { published });
     await store.update("agencies", a.id, publish ? { gamesPublished: (a.gamesPublished || 0) + 1 } : {});
-    res.json({ published });
+    res.json({ published: withStudioLink(published) });
   }));
 
   // ------------------------------------------------------------ OKX gateway

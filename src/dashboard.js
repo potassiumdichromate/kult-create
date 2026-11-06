@@ -1,4 +1,5 @@
 import { EMPLOYEES } from "./employees.js";
+import { withStudioLink } from "./services.js";
 
 // The CEO dashboard: what the studio made and spent (this service) joined
 // with how its published games are doing (Creator Studio: plays, likes,
@@ -43,7 +44,7 @@ export async function buildDashboard({ store, studio, agency, range }) {
       row.status = "complete";
     } else if (p.status === "running") row.status = row.status === "complete" ? "updating" : "running";
     else if (p.status === "failed" && row.status !== "complete") { row.status = "failed"; row.error = p.error ?? null; }
-    if (p.published) row.published = p.published;
+    if (p.published) row.published = withStudioLink(p.published);
     rows.set(root.id, row);
   }
   const games = [...rows.values()].map((row) => {

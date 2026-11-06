@@ -33,6 +33,14 @@ export const computeLayer = {
   health: () => compute("GET", "/health")
 };
 
+// A full link to a game's page on the Creator Studio site.
+export function studioLink(url) {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${config.creatorStudioApp}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+export const withStudioLink = (published) => (published ? { ...published, playUrl: studioLink(published.playUrl) } : published);
+
 export const creatorStudio = {
   // Imports the finished compute-layer run as a game owned by the studio's
   // wallet (art copied to R2, 0G provenance) and optionally publishes it.
