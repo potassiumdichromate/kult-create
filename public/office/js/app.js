@@ -2,6 +2,7 @@ import { Office } from "./world.js";
 import { realApi } from "./api.js";
 import { createDemoApi } from "./demo.js";
 import { renderDashboard, renderTopGames } from "./dashboard.js";
+import { createTour } from "./tour.js";
 
 // Kult Create office: entrance → studio registration → the office, where the
 // CEO writes a brief and the employees build the game live.
@@ -330,6 +331,7 @@ $("connect").addEventListener("click", async (ev) => {
 function showRegister(wallets, candidates) {
   show("no-agent", false);
   show("register");
+  setTimeout(() => { if (isShown("register")) tour.offer("r-hello", forceTour); }, 400);
   $("reg-wallets").textContent = wallets.map(short).join(", ");
   const list = $("ceo-list");
   list.replaceChildren();
@@ -487,6 +489,8 @@ async function enterOffice(agency, fresh = false) {
     const running = productions.find((p) => p.status === "running");
     if (running) attach(running.id);
   } catch { /* office still usable */ }
+  // A player who opened the studio mid-tour carries on with it; anyone else new gets it here.
+  if (!tour.running) setTimeout(() => { if (state.agency && !document.body.classList.contains("panel-open")) tour.offer("o-hello", forceTour); }, 1500);
 }
 
 $("exit").addEventListener("click", () => window.parent.postMessage({ type: "kultcreate:exit" }, "*"));
@@ -828,5 +832,69 @@ $("history-btn").addEventListener("click", async () => {
   show("history");
 });
 $("history-close").addEventListener("click", () => show("history", false));
+
+// ------------------------------------------------------------------ tutorial
+// Nova, the KULT guide (the same tutorial as Kult World's, js/tour.js), walks a
+// new player through opening the studio and around the office. Once per
+// player; the top bar's Tutorial button or ?tour shows it again.
+const forceTour = params.has("tour");
+const isShown = (id) => !$(id).hidden;
+const viewOpen = (id) => isShown(id) && document.body.classList.contains("panel-open");
+const navSel = (v) => `#sidebar [data-view="${v}"]`;
+const TOUR_LINES = {
+  "r-hello": "Hi, I'm Nova, your KULT guide! Kult Create is a game studio run by AI: your KULT agent is the CEO, ten AI employees build the games, and you publish them to Creator Studio. Let's open your studio.",
+  "r-ceo": "Your CEO is your own KULT agent, your AI Arena INFT on 0G. It writes the briefs and runs the team.",
+  "r-name": "Name your studio and give it a tagline. Players see both on every game you publish.",
+  "r-okx": "Optional: link your OKX.ai identity so people and agents on OKX.ai can hire your studio. You can also do it later from the top bar.",
+  "r-go": "Ready? Open your studio!",
+  "o-hello": "Welcome to your studio! Your producer, designers, artists, engineer, QA and playtester work on this floor. Let me show you around.",
+  "o-hud": "Up top: your studio, your CEO and your credits. Every game costs credits, and you start with plenty.",
+  "o-okx": "Your OKX.ai identity. Link it and your studio is listed on OKX.ai, where buyers can hire it to build games.",
+  "o-feed": "The studio floor. Your team talks here while they work, from the first design to the final playtest.",
+  "o-brief": "This is where it starts. Pitch a game to your team in a sentence or two: the theme, how you play, how you win.",
+  "o-modes": "Pick the quality. PRO gets drawn sprites, a painted scene and a phone playtest. ULTRA uses the top models, more sprites and extra QA fixes.",
+  "o-start": "Then press Start production. You'll watch the team build it live, play it when it's done, ask for changes and publish it.",
+  "o-dash-go": "Open the Dashboard.",
+  "o-dash": "Your CEO dashboard: games made, plays, likes and credits spent, by day, week, month or year.",
+  "o-games-go": "Now open Games.",
+  "o-games": "The most-played games from every studio in Kult Create. Tap Play to try one and see what everyone else is making.",
+  "o-credits-go": "Open Credits.",
+  "o-credits": "Your studio wallet: what each game costs, and where to add credits when you run low.",
+  "o-studio": "Studio holds your settings: your name and tagline, your CEO and your OKX.ai link.",
+  "o-office-go": "Back to the floor.",
+  "o-done": "You're all set. Write your first brief and watch your team build it. Have fun, CEO!"
+};
+const tour = createTour({
+  guide: { img: "art/nova.png", name: "NOVA" },
+  lines: TOUR_LINES,
+  doneKeys: () => [state.wallets?.[0] && `kc.tour.v1.${String(state.wallets[0]).toLowerCase()}`, state.agency?.id && `kc.tour.v1.${state.agency.id}`].filter(Boolean),
+  onFinish: () => { office.celebrate?.(4); say("ceo", "Alright team, let's make something great!"); },
+  steps: [
+    // Opening the studio.
+    { id: "r-hello", phase: "register", next: true, nextLabel: "Let's go", title: "Welcome to Kult Create" },
+    { id: "r-ceo", phase: "register", target: "#ceo-list", next: true, interactive: true },
+    { id: "r-name", phase: "register", target: "#reg-name, #reg-tagline", next: true, interactive: true },
+    { id: "r-okx", phase: "register", target: "#okx-section", next: true, interactive: true },
+    { id: "r-go", phase: "register", target: "#register-btn", done: () => Boolean(state.agency) && !isShown("register"), doneDelay: 1200 },
+    // The office.
+    { id: "o-hello", phase: "office", next: true, quiet: () => !state.agency },
+    { id: "o-hud", phase: "office", target: "#hud", next: true },
+    { id: "o-okx", phase: "office", target: "#okx-badge", next: true, skip: () => !$("okx-badge").getClientRects().length },
+    { id: "o-feed", phase: "office", target: "#feed", next: true, skip: () => !$("feed").getClientRects().length },
+    { id: "o-brief", phase: "office", target: "#brief", next: true, interactive: true, skip: () => !isShown("brief-form") },
+    { id: "o-modes", phase: "office", target: "#brief-form .modes", next: true, interactive: true, skip: () => !isShown("brief-form") },
+    { id: "o-start", phase: "office", target: "#start", next: true, skip: () => !isShown("brief-form") },
+    { id: "o-dash-go", phase: "office", target: navSel("dashboard"), done: () => viewOpen("dashboard") },
+    { id: "o-dash", phase: "office", target: "#dashboard", next: true, lost: () => !viewOpen("dashboard"), fallback: "o-dash-go" },
+    { id: "o-games-go", phase: "office", target: navSel("games"), done: () => viewOpen("games-view") },
+    { id: "o-games", phase: "office", target: "#games-view", next: true, lost: () => !viewOpen("games-view"), fallback: "o-games-go" },
+    { id: "o-credits-go", phase: "office", target: navSel("credits"), done: () => viewOpen("credits-view") },
+    { id: "o-credits", phase: "office", target: "#credits-view", next: true, lost: () => !viewOpen("credits-view"), fallback: "o-credits-go" },
+    { id: "o-studio", phase: "office", target: navSel("studio"), next: true },
+    { id: "o-office-go", phase: "office", target: navSel("office"), done: () => !document.body.classList.contains("panel-open") },
+    { id: "o-done", phase: "office", next: true, nextLabel: "Let's build", last: true, title: "Your studio is open" }
+  ]
+});
+$("tour-btn").addEventListener("click", () => { setView("office"); tour.start("o-hello"); });
 
 boot();

@@ -63,6 +63,20 @@ Kult World ──iframe──▶ /office/ (this service)
    Creator Studio to import the run (art copied to its storage, 0G provenance,
    the same publish steps as a normal game) under the studio's wallet.
 
+## Tutorial
+
+Nova, the KULT guide from Kult World, walks a new player through opening the
+studio (CEO, name and tagline, the optional OKX.ai link) and around the
+office: the top bar, the OKX.ai badge, the studio floor, the brief, PRO and
+ULTRA, Start production, then Dashboard, Games and Credits (the player opens
+each one) and Studio. A spotlight shows one thing at a time with the rest
+dimmed, and each step either has a Next button or waits for the player to do it.
+
+It runs once per player (stored in the browser). The top bar's **Tutorial**
+button or `?tour` shows it again. The engine is `public/office/js/tour.js`, the
+same as Kult World's and Kult Sports'; keep the copies in sync. The steps and
+Nova's lines are in `public/office/js/app.js`.
+
 ## The office in 3D
 
 The office is a three.js scene in the Kult World look: a glowing studio floor
