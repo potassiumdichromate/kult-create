@@ -63,7 +63,19 @@ class FakeCompute {
 let server, base, store, productions;
 const compute = new FakeCompute();
 const studioCalls = [];
-const fakeStudio = { async importRun(args) { studioCalls.push(args); return { gameId: "g1", playUrl: "https://studio/play?gameId=g1", status: args.publish ? "published" : "draft" }; } };
+const publishedGames = {
+  older: { id: "older", title: "Older", generation: { mode: "prompt-to-game" }, gameplay: { controls: "Tap to jump" }, refinement: { generatedCode: "1;" } },
+  g1: { id: "g1", title: "Test <Game>", description: "Shoot things", generation: { mode: "compute-layer" }, gameplay: { controls: "Drag to move" }, studio: { name: "Pixel Pirates", agencyId: "agy_secret" }, refinement: { generatedCode: 'import x from "./gamePackage.js";\nexport const a = "</script>";\nconsole.log("GAME_CODE $& $1");', model: "secret-model" } },
+  nobuild: { id: "nobuild", title: "Awaiting build", refinement: {} }
+};
+const fakeStudio = {
+  async importRun(args) { studioCalls.push(args); return { gameId: "g1", playUrl: "https://studio/play?gameId=g1", status: args.publish ? "published" : "draft" }; },
+  async game(id) {
+    if (id === "down") throw Object.assign(new Error("Creator Studio is unreachable right now. Try again in a minute."), { status: 503, upstream: true });
+    if (!publishedGames[id]) throw Object.assign(new Error("Published game not found"), { status: 404, upstream: true });
+    return { game: publishedGames[id] };
+  }
+};
 
 before(async () => {
   store = await createStore({ mongoUri: "", dataFile: join(dir, "db.json") });
@@ -366,4 +378,53 @@ test("a Creator Studio play path becomes a full link to the Creator Studio site"
   assert.equal(studioLink(null), null);
   assert.deepEqual(withStudioLink({ gameId: "g1", status: "published", playUrl: "/play?gameId=g1" }).playUrl, `${config.creatorStudioApp}/play?gameId=g1`);
   assert.equal(withStudioLink(null), null);
+  // Creator Studio's public URL set without a scheme.
+  assert.equal(studioLink("create.kult.games/play?gameId=g1"), "https://create.kult.games/play?gameId=g1");
+});
+
+test("a site URL without a scheme becomes a real link", async () => {
+  const { webUrl } = await import("../src/config.js");
+  assert.equal(webUrl("create.kult.games"), "https://create.kult.games");
+  assert.equal(webUrl("https://create.kult.games/"), "https://create.kult.games");
+  assert.equal(webUrl("http://localhost:4300"), "http://localhost:4300");
+  assert.equal(webUrl(""), "");
+});
+
+test("the play page is public and shows a game's details, not its code", async () => {
+  const page = await fetch(`${base}/play?gameId=g1`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get("content-type"), /html/);
+  assert.match(await page.text(), /sandbox="allow-scripts"/);
+
+  const info = await call("GET", "/play/g1/info");
+  assert.equal(info.status, 200);
+  assert.deepEqual(info.body, { id: "g1", title: "Test <Game>", description: "Shoot things", controls: "Drag to move", studio: "Pixel Pirates" });
+  assert.equal((await call("GET", "/play/older/info")).body.controls, "", "a template's controls aren't trusted");
+});
+
+test("a game runs in a sandbox, with its code intact and its internals left out", async () => {
+  const res = await fetch(`${base}/play/g1/game.html`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-security-policy"), /sandbox allow-scripts(?!.*allow-same-origin)/);
+  assert.match(res.headers.get("content-security-policy"), /frame-ancestors/);
+  const html = await res.text();
+  assert.match(html, /<title>Test &lt;Game&gt;<\/title>/);
+  assert.ok(html.includes('console.log("GAME_CODE $& $1")'), "the code is inserted literally");
+  assert.ok(!html.includes("./gamePackage.js"), "unresolvable imports are removed");
+  assert.ok(html.includes('const a = "<\\/script>"'), "the code can't close its script tag");
+  assert.ok(!html.includes("secret-model"), "the build's internals stay out");
+});
+
+test("games that can't be played answer clearly", async () => {
+  assert.equal((await call("GET", "/play/missing/info")).status, 404);
+  assert.equal((await call("GET", "/play/nobuild/info")).status, 404);
+  assert.equal((await call("GET", "/play/nobuild/game.html")).status, 404);
+  assert.equal((await call("GET", "/play/bad%20id%21/info")).status, 404);
+  assert.equal((await call("GET", "/play/down/info")).status, 503);
+});
+
+test("links with the site's name in the office path redirect to the play page", async () => {
+  const res = await fetch(`${base}/office/create.kult.games/play?gameId=h4MdrFKkbVw4`, { redirect: "manual" });
+  assert.equal(res.status, 301);
+  assert.equal(res.headers.get("location"), "/play?gameId=h4MdrFKkbVw4");
 });

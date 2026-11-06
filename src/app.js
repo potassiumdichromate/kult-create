@@ -11,6 +11,7 @@ import { EMPLOYEES } from "./employees.js";
 import { arenaHealth, arenaEnabled, agentByToken } from "./arena.js";
 import { verifyPrivy, privyConfigured } from "./privy.js";
 import { buildDashboard } from "./dashboard.js";
+import { GAME_ID, buildPlayHtml, publicGameInfo } from "./play.js";
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(40),
@@ -44,12 +45,13 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
 
   // Kult World embeds the office in an iframe and may call the API cross-origin.
   const anyOrigin = config.allowedOrigins.includes("*");
+  const frameAncestors = `frame-ancestors ${anyOrigin ? "*" : ["'self'", ...config.allowedOrigins].join(" ")}`;
   app.use((req, res, next) => {
     const origin = req.get("origin");
     if (origin && (anyOrigin || config.allowedOrigins.includes(origin))) {
       res.set({ "Access-Control-Allow-Origin": origin, Vary: "Origin", "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" });
     }
-    res.set("Content-Security-Policy", `frame-ancestors ${anyOrigin ? "*" : ["'self'", ...config.allowedOrigins].join(" ")}`);
+    res.set("Content-Security-Policy", frameAncestors);
     if (req.method === "OPTIONS") { res.sendStatus(204); return; }
     next();
   });
@@ -331,6 +333,35 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     if (!p || p.agencyId !== req.params.id) { res.status(404).json({ error: "Production not found" }); return; }
     res.json({ production: publicProduction(p) });
   }));
+
+  // ------------------------------------------------------------ play
+  // Anyone with a link can play a published game: /play?gameId=…
+  const playableGame = async (gameId) => {
+    const notFound = () => Object.assign(new Error("Game not found"), { status: 404 });
+    if (!GAME_ID.test(gameId)) throw notFound();
+    const { game } = await studio.game(gameId);
+    if (!game?.refinement?.generatedCode) throw notFound();
+    return game;
+  };
+
+  app.get("/play", (_req, res) => { res.set("Cache-Control", "no-cache").sendFile(join(ROOT, "public", "play", "index.html")); });
+
+  app.get("/play/:gameId/info", wrap(async (req, res) => {
+    res.set("Cache-Control", "public, max-age=60").json(publicGameInfo(await playableGame(req.params.gameId)));
+  }));
+
+  // The sandbox here applies even if this URL is opened directly (see play.js).
+  app.get("/play/:gameId/game.html", wrap(async (req, res) => {
+    const game = await playableGame(req.params.gameId);
+    res.set({ "Content-Security-Policy": `sandbox allow-scripts; ${frameAncestors}`, "Cache-Control": "public, max-age=60" }).type("html").send(buildPlayHtml(game));
+  }));
+
+  // Links built from a host with no scheme resolved against the office page, as
+  // /office/create.kult.games/play?gameId=…. Keep the ones already handed out working.
+  app.get(/^\/office\/[^/]+\.[^/]+\/play\/?$/, (req, res) => {
+    const query = req.originalUrl.indexOf("?");
+    res.redirect(301, `/play${query < 0 ? "" : req.originalUrl.slice(query)}`);
+  });
 
   // ------------------------------------------------------------ office
   // Drop-in script Kult World loads to open the office (cross-origin <script>).

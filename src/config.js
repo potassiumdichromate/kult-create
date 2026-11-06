@@ -23,6 +23,12 @@ const num = (key, fallback) => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 const isProd = env("NODE_ENV", "development") === "production";
+// A site's base URL. Without a scheme, browsers treat "site.com/play" as a path
+// on the current page.
+export const webUrl = (value) => {
+  const url = String(value).trim().replace(/\/+$/, "");
+  return !url || /^https?:\/\//i.test(url) ? url : `https://${url}`;
+};
 
 export const config = {
   isProd,
@@ -90,10 +96,11 @@ export const config = {
   // Services this building uses.
   computeLayer: { url: env("COMPUTE_LAYER_URL", "http://localhost:4100").replace(/\/$/, ""), key: env("COMPUTE_LAYER_KEY", "") },
   creatorStudio: { url: env("CREATOR_STUDIO_URL", "http://localhost:3001").replace(/\/$/, ""), key: env("CREATOR_STUDIO_KEY", "") },
-  // The Creator Studio site players open published games on. Creator Studio's
-  // API answers with a path ("/play?gameId=…") unless its own public URL is
-  // set; a path opened from the office would land on this service instead.
-  creatorStudioApp: env("CREATOR_STUDIO_APP_URL", "https://app.kult.games/create").replace(/\/$/, ""),
+  // The site players open published games on: by default this service's own
+  // /play page. Creator Studio's API answers with a path ("/play?gameId=…")
+  // unless its own public URL is set. With neither variable set, links stay
+  // paths, which still reach /play from the office.
+  creatorStudioApp: webUrl(env("CREATOR_STUDIO_APP_URL", env("PUBLIC_URL", ""))),
   // The Kult OKX gateway (AI Arena's marketplace service) starts paid builds
   // for studios its owners linked to OKX.AI. Same value as KULT_CREATE_GATEWAY_KEY there.
   gateway: { key: env("GATEWAY_KEY", "") },

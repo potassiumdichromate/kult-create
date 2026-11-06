@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Play · Kult Create</title>
+  <meta name="description" content="Play games made in Kult Create.">
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #0b0717; --panel: rgba(26, 18, 54, 0.72); --line: rgba(255, 255, 255, 0.13); --text: #f1edff; --muted: #b3a9da; --pink: #ff4fa3; --red: #ff6b7d; --display: "Chakra Petch", "Inter", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; background: var(--bg); color: var(--text); font: 15px/1.5 "Inter", system-ui, sans-serif; }
+    a { color: inherit; }
+    .bar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 8px; flex: none; font: 700 15px var(--display); text-decoration: none; }
+    .brand svg { width: 24px; height: 24px; fill: none; stroke: var(--pink); stroke-width: 2; stroke-linecap: round; }
+    .meta { flex: 1; min-width: 0; padding-left: 16px; border-left: 1px solid var(--line); }
+    h1 { margin: 0; overflow: hidden; font: 600 17px/1.3 var(--display); text-overflow: ellipsis; white-space: nowrap; }
+    .by { margin: 0; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+    button { flex: none; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.07); color: var(--text); font: 600 14px "Inter", system-ui, sans-serif; cursor: pointer; }
+    button:hover { background: rgba(255, 255, 255, 0.14); }
+    button.primary { border-color: transparent; background: var(--pink); color: #17061a; }
+    .stage { position: relative; min-height: 0; background: var(--bg); }
+    iframe { display: block; width: 100%; height: 100%; border: 0; }
+    .notice { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; padding: 24px; text-align: center; }
+    .notice h2 { margin: 0; font: 600 22px var(--display); }
+    .notice p { max-width: 44ch; margin: 0; color: var(--muted); }
+    .notice.error h2 { color: var(--red); }
+    form { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+    input { width: 240px; max-width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(8, 4, 24, 0.55); color: var(--text); font: inherit; }
+    .about { display: flex; flex-wrap: wrap; gap: 4px 20px; max-height: 22dvh; overflow: auto; padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .about p { margin: 0; }
+    .about strong { color: var(--text); font-weight: 600; }
+    [hidden] { display: none !important; }
+    @media (max-width: 560px) { .brand span { display: none; } .meta { padding-left: 12px; } }
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="/office/" title="Open Kult Create">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="6"/><path d="M6 12h4M8 10v4"/><path d="M15 11h.01M18 13h.01"/></svg>
+      <span>Kult Create</span>
+    </a>
+    <div class="meta">
+      <h1 id="title">Play a game</h1>
+      <p id="by" class="by" hidden></p>
+    </div>
+    <button type="button" id="fullscreen" hidden>Full screen</button>
+  </header>
+
+  <main id="stage" class="stage">
+    <div id="notice" class="notice" role="status">
+      <h2 id="notice-title">Loading game…</h2>
+      <p id="notice-text"></p>
+      <button type="button" id="retry" class="primary" hidden>Try again</button>
+      <form id="lookup" method="get" action="/play" hidden>
+        <input name="gameId" aria-label="Game ID" placeholder="Game ID" required pattern="[A-Za-z0-9_\-]{1,64}" autocomplete="off">
+        <button type="submit" class="primary">Play</button>
+      </form>
+    </div>
+    <!-- The game is AI-written: allow-scripts without allow-same-origin keeps it
+         away from this site's storage and sessions. -->
+    <iframe id="game" title="Game" sandbox="allow-scripts" allow="autoplay; fullscreen; gamepad" hidden></iframe>
+  </main>
+
+  <footer id="about" class="about" hidden>
+    <p id="controls" hidden></p>
+    <p id="description" hidden></p>
+  </footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const gameId = (new URLSearchParams(location.search).get("gameId") || "").trim();
+
+    function notice(title, text, { error = false, retry = false, lookup = false } = {}) {
+      $("notice").classList.toggle("error", error);
+      $("notice-title").textContent = title;
+      $("notice-text").textContent = text;
+      $("retry").hidden = !retry;
+      $("lookup").hidden = !lookup;
+    }
+
+    function show(game) {
+      document.title = `${game.title} · Kult Create`;
+      $("title").textContent = game.title;
+      if (game.studio) { $("by").textContent = `by ${game.studio}`; $("by").hidden = false; }
+      if (game.controls) {
+        const label = document.createElement("strong");
+        label.textContent = "Controls: ";
+        $("controls").append(label, game.controls);
+        $("controls").hidden = false;
+      }
+      if (game.description) { $("description").textContent = game.description; $("description").hidden = false; }
+      $("about").hidden = !game.controls && !game.description;
+
+      const frame = $("game");
+      // Lets the keyboard reach the game without clicking it first.
+      frame.addEventListener("load", () => { $("notice").hidden = true; frame.hidden = false; frame.focus(); }, { once: true });
+      frame.src = `/play/${encodeURIComponent(game.id)}/game.html`;
+      if ($("stage").requestFullscreen) $("fullscreen").hidden = false;
+    }
+
+    async function load() {
+      if (!gameId) {
+        notice("Play a game", "Enter a game ID to start playing.", { lookup: true });
+        return;
+      }
+      notice("Loading game…", "");
+      try {
+        const res = await fetch(`/play/${encodeURIComponent(gameId)}/info`);
+        if (res.status === 404) {
+          notice("Game not found", "This game doesn't exist or isn't published. Check the ID and try again.", { error: true, lookup: true });
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        show(await res.json());
+      } catch {
+        notice("Couldn't load this game", "Creator Studio isn't responding right now. Give it a moment and try again.", { error: true, retry: true });
+      }
+    }
+
+    $("retry").addEventListener("click", load);
+    $("fullscreen").addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else $("stage").requestFullscreen();
+    });
+    document.addEventListener("fullscreenchange", () => {
+      $("fullscreen").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+      $("game").focus();
+    });
+    load();
+  </script>
+</body>
+</html>
