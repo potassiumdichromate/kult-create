@@ -45,9 +45,27 @@ let scale = 1;
 function fit() {
   const box = $("stage").getBoundingClientRect();
   if (!box.width || !box.height) return; // hidden (another view is open)
+  office.setInsets(stageInsets(box));
   office.resize(box.width, box.height);
 }
-new ResizeObserver(fit).observe($("stage"));
+
+// On desktop the office fills the screen and panels float over it: frame the
+// room in the space they leave (the canvas still draws behind them).
+function stageInsets(box) {
+  if (getComputedStyle($("stage")).position !== "fixed") return { top: 0, right: 0, bottom: 0, left: 0 };
+  const r = (id) => { const n = $(id); return n && !n.hidden && n.getClientRects().length ? n.getBoundingClientRect() : null; };
+  const hud = r("hud"), feed = r("feed"), lows = [r("console"), r("sidebar")].filter(Boolean).map((x) => x.top);
+  return {
+    top: hud ? hud.bottom - box.top + 6 : 0,
+    right: feed ? box.right - feed.left + 6 : 0,
+    bottom: lows.length ? box.bottom - Math.min(...lows) + 6 : 0,
+    left: 16
+  };
+}
+{
+  const ro = new ResizeObserver(() => fit());
+  for (const id of ["stage", "hud", "feed", "console", "sidebar"]) if ($(id)) ro.observe($(id));
+}
 
 const bubbles = new Map(); // employee → { node, until }
 function say(id, text) {

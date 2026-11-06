@@ -199,6 +199,8 @@ export class OfficeScene {
     this.lightsOn = true; this.exposure = 0.4;
     this.anims = [];
     this.az = Math.PI / 4; this.azTarget = this.az; this.zoom = 1; this.zoomTarget = 1;
+    // Pixels of the canvas covered by floating UI; the room is framed in the rest.
+    this.insets = { top: 0, right: 0, bottom: 0, left: 0 };
     this.screenCanvas = document.createElement("canvas");
     this.screenCanvas.width = 156 * 6; this.screenCanvas.height = 66 * 6;
 
@@ -245,18 +247,32 @@ export class OfficeScene {
     this.bloom.resolution.set(w / 2, h / 2);
     this.frame();
   }
-  // Fit the room (any way it is turned) into the canvas.
+  /** Keep the room clear of UI floating over the canvas (in CSS pixels). */
+  setInsets(i) {
+    const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+    const next = { top: n(i.top), right: n(i.right), bottom: n(i.bottom), left: n(i.left) };
+    if (Object.keys(next).every((k) => next[k] === this.insets[k])) return;
+    this.insets = next;
+    if (this.W) this.frame();
+  }
+  // Fit the room (any way it is turned) into the canvas, inside the insets.
   frame() {
     const c = this.camera, el = THREE.MathUtils.degToRad(30), center = V(ROOM.X / 2, ROOM.Y / 2, 0.6);
     c.position.set(center.x + Math.sin(this.az) * Math.cos(el) * 40, center.y + Math.sin(el) * 40, center.z + Math.cos(this.az) * Math.cos(el) * 40);
     c.up.set(0, 1, 0); c.lookAt(center); c.updateMatrixWorld(true);
     const inv = c.matrixWorldInverse, b = new THREE.Box2(), p = new THREE.Vector3();
     for (const x of [-0.4, ROOM.X + 0.4]) for (const z of [-0.4, ROOM.Y + 0.4]) for (const y of [-0.7, ROOM.H + 0.3]) { p.set(x, y, z).applyMatrix4(inv); b.expandByPoint(new THREE.Vector2(p.x, p.y)); }
-    const cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2, aspect = this.W / this.H;
+    const ins = this.insets;
+    // The free area; ignore insets that would leave too little room.
+    let fw = this.W - ins.left - ins.right, fh = this.H - ins.top - ins.bottom;
+    const use = fw > this.W * 0.35 && fh > this.H * 0.35;
+    if (!use) { fw = this.W; fh = this.H; }
+    const cx = (b.min.x + b.max.x) / 2, cy = (b.min.y + b.max.y) / 2, aspect = fw / fh;
     let hw = (b.max.x - b.min.x) / 2 * 1.04, hh = (b.max.y - b.min.y) / 2 * 1.06;
     if (hw / hh > aspect) hh = hw / aspect; else hw = hh * aspect;
     hw /= this.zoom; hh /= this.zoom;
-    Object.assign(c, { left: cx - hw, right: cx + hw, top: cy + hh, bottom: cy - hh });
+    const s = (2 * hw) / fw, l = use ? ins.left : 0, r = use ? ins.right : 0, t = use ? ins.top : 0, bt = use ? ins.bottom : 0;
+    Object.assign(c, { left: cx - hw - l * s, right: cx + hw + r * s, top: cy + hh + t * s, bottom: cy - hh - bt * s });
     c.updateProjectionMatrix();
   }
   // Drag to turn the room a little, wheel to zoom, double-click to reset.

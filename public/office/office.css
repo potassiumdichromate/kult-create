@@ -353,3 +353,171 @@ body.panel-open #stage, body.panel-open #console { display: none; }
   .view-panel, #dashboard { contain: size; }
   body { overflow: hidden; }
 }
+
+/* ================================================================ Glass HUD (v3)
+   The 3D office fills the screen, like Kult World; every panel floats over it:
+   the top bar, the activity feed on the right, the action card above a dock of
+   icon tiles, and the views as large glass sheets. */
+:root { --gap: 14px; --hud-h: 66px; --dock-h: 88px; --feed-w: 320px; --console-w: 660px; }
+body {
+  background:
+    radial-gradient(ellipse at 18% -10%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 52%),
+    radial-gradient(ellipse at 100% 110%, color-mix(in srgb, var(--accent-2) 30%, transparent), transparent 55%),
+    var(--bg);
+}
+
+/* Shared glass: a little denser and with a lit top edge, so text stays crisp over the 3D scene. */
+.panel {
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 38%), var(--glass, rgba(20, 13, 44, 0.66));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 18px 48px rgba(3, 0, 14, 0.55);
+}
+
+/* ---------------------------------------------------------------- top bar */
+#hud { gap: 14px; padding: 9px 12px 9px 9px; border-radius: 22px; }
+#hud .logo { width: 48px; height: 48px; border-radius: 15px; font: 700 15px var(--display); color: #fff; letter-spacing: 0.04em; }
+#studio-name, #agency-name { font-size: 19px; letter-spacing: 0.03em; }
+#studio-tagline, #agency-sub { font-size: 12.5px; }
+.badge { padding: 6px 12px; border-color: rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.07); font-weight: 600; }
+.badge.gold { background: rgba(255, 201, 77, 0.1); }
+.credits { padding: 7px 16px 7px 8px; background: linear-gradient(180deg, rgba(255, 201, 77, 0.16), rgba(255, 201, 77, 0.05)); border-color: rgba(255, 201, 77, 0.45); box-shadow: 0 0 22px rgba(255, 201, 77, 0.12); }
+.credits .coin { width: 22px; height: 22px; }
+.credits .display { font-size: 18px; }
+
+/* ---------------------------------------------------------------- dock (the views) */
+#sidebar.panel {
+  gap: 4px; padding: 8px; border-radius: 24px;
+  background: linear-gradient(180deg, rgba(30, 20, 64, 0.95), rgba(10, 6, 24, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent), 0 0 34px color-mix(in srgb, var(--accent) 16%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.nav-item { gap: 6px; padding: 4px; border: 0; border-radius: 16px; background: none; color: rgba(241, 237, 255, 0.78); font: 700 11px var(--display); letter-spacing: 0.04em; }
+.nav-item:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+.nav-item .ico-slot {
+  display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px;
+  background: color-mix(in srgb, var(--c, var(--accent)) 16%, rgba(255, 255, 255, 0.03));
+  border: 1px solid color-mix(in srgb, var(--c, var(--accent)) 38%, transparent);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.nav-item .ico { width: 23px; height: 23px; color: var(--c, var(--accent)); stroke-width: 2.1; filter: none; }
+.nav-item:hover .ico-slot { transform: translateY(-3px); box-shadow: 0 8px 20px color-mix(in srgb, var(--c, var(--accent)) 35%, transparent); }
+.nav-item.active { background: none; border: 0; box-shadow: none; color: #fff; }
+.nav-item.active .ico-slot {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--c, var(--accent)) 90%, #fff), var(--c, var(--accent)) 45%, color-mix(in srgb, var(--c, var(--accent)) 60%, #0b0717));
+  border-color: color-mix(in srgb, var(--c, var(--accent)) 55%, #fff);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--c, var(--accent)) 50%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -3px 0 rgba(0, 0, 0, 0.22);
+}
+.nav-item.active .ico { color: #fff; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.45)); }
+.nav-item:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- feed */
+#feed { padding: 14px 12px 12px; border-radius: 22px; }
+.feed-head h2.display { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 0.14em; }
+.feed-head h2.display::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-3); box-shadow: 0 0 10px var(--accent-3); animation: livepulse 1.8s ease-in-out infinite; }
+@keyframes livepulse { 50% { opacity: 0.35; } }
+#log li { background: rgba(255, 255, 255, 0.045); border-color: rgba(255, 255, 255, 0.1); border-radius: 14px; }
+
+/* ---------------------------------------------------------------- action card */
+#console { border-radius: 22px; padding: 14px; }
+h2.display { letter-spacing: 0.1em; }
+
+/* ---------------------------------------------------------------- views + sheets */
+.view-panel, #dashboard { border-radius: 24px; }
+.dash-head h2.display { font-size: 26px; letter-spacing: 0.01em; }
+.dash-head .eyebrow { color: var(--accent-3); }
+.overlay { background: radial-gradient(ellipse at 50% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%), rgba(5, 2, 15, 0.66); }
+.sheet { border-radius: 26px; border-color: rgba(255, 255, 255, 0.18); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 30px 90px rgba(3, 0, 14, 0.75); }
+.sheet::before { content: ""; position: absolute; left: 12%; right: 12%; top: -1px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent), var(--accent-3), transparent); opacity: 0.9; }
+.sign { font-size: 44px; letter-spacing: 0.1em; margin: 6px 0 6px; }
+.lead { font-size: 15.5px; }
+.perks { list-style: none; padding: 0; display: grid; gap: 8px; margin: 18px 0 20px; }
+.perks li { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); }
+.perks li::before { content: ""; flex: none; width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.boot-dots { border-top-color: var(--accent); border-right-color: var(--accent-3); filter: drop-shadow(0 0 12px var(--accent)); }
+
+/* ================================================================ desktop: floating layout */
+@media (min-width: 861px) {
+  body { overflow: hidden; }
+  #app { display: block; height: 100dvh; padding: 0; }
+  #stage { position: fixed; inset: 0; z-index: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  #stage::after {
+    border-radius: 0;
+    background:
+      linear-gradient(180deg, rgba(5, 2, 15, 0.6), transparent 16%, transparent 70%, rgba(5, 2, 15, 0.7)),
+      radial-gradient(ellipse at 42% 46%, transparent 52%, rgba(5, 2, 15, 0.55) 100%);
+  }
+  #hud { position: fixed; top: var(--gap); left: var(--gap); right: var(--gap); z-index: 6; min-height: var(--hud-h); }
+  #feed { position: fixed; top: calc(var(--gap) * 2 + var(--hud-h)); right: var(--gap); bottom: calc(var(--gap) * 2 + var(--dock-h)); width: var(--feed-w); z-index: 4; }
+  #sidebar.panel { position: fixed; left: calc((100vw - var(--feed-w) - var(--gap)) / 2); bottom: var(--gap); transform: translateX(-50%); z-index: 6; flex-direction: row; }
+  .nav-item { width: 78px; }
+  #console { position: fixed; left: calc((100vw - var(--feed-w) - var(--gap)) / 2); bottom: calc(var(--gap) * 2 + var(--dock-h)); transform: translateX(-50%); width: min(var(--console-w), calc(100vw - var(--feed-w) - var(--gap) * 4)); z-index: 5; }
+  .view-panel, #dashboard {
+    position: fixed; z-index: 5; contain: none;
+    top: calc(var(--gap) * 2 + var(--hud-h)); bottom: calc(var(--gap) * 2 + var(--dock-h));
+    left: var(--gap); right: calc(var(--feed-w) + var(--gap) * 2);
+    padding: 22px 24px 28px;
+    background: linear-gradient(165deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 30%), var(--glass-strong, rgba(16, 10, 36, 0.88));
+    animation: sheetpop 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  }
+  /* A view opens over the office, which stays visible but steps back. */
+  body.panel-open #stage { display: block; filter: brightness(0.55) saturate(0.8) blur(2px); transition: filter 0.3s; }
+  body.panel-open #console { display: none; }
+}
+/* Narrower desktops: a slimmer feed. */
+@media (min-width: 861px) and (max-width: 1180px) { :root { --feed-w: 270px; } .nav-item { width: 68px; } }
+
+/* ================================================================ phones */
+@media (max-width: 860px) {
+  #app { gap: 12px; padding: 12px 12px 96px; }
+  #stage { border-radius: 22px; }
+  #sidebar.panel { left: 10px; right: 10px; bottom: 10px; padding: 7px 4px; border-radius: 22px; }
+  .nav-item { flex: 1; min-width: 0; padding: 2px; font-size: 9.5px; }
+  .nav-item .ico-slot { width: 40px; height: 40px; border-radius: 13px; }
+  .nav-item .ico { width: 21px; height: 21px; }
+  .sign { font-size: 34px; }
+}
+
+/* ================================================================ Kult Create theme (v3) */
+:root { --accent: #ff4fa3; --accent-2: #8a4dff; --accent-3: #4fd8ff; --glass: rgba(22, 13, 46, 0.66); --glass-strong: rgba(18, 10, 38, 0.9); }
+#sidebar [data-view="office"] { --c: #ff4fa3; }
+#sidebar [data-view="dashboard"] { --c: #4fd8ff; }
+#sidebar [data-view="games"] { --c: #b14dff; }
+#sidebar [data-view="credits"] { --c: #ffc94d; }
+#sidebar [data-view="studio"] { --c: #a78bfa; }
+
+/* The CEO console is a composer: the pitch on top, quality and the start button below. */
+#console .console-head { margin-bottom: 10px; }
+#brief-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brief brief" "modes start"; gap: 10px; }
+#brief { grid-area: brief; min-height: 72px; resize: none; border-radius: 16px; background: rgba(5, 2, 15, 0.5); border-color: rgba(255, 255, 255, 0.12); font-size: 14.5px; line-height: 1.45; }
+#brief:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+#brief-form .modes { grid-area: modes; margin: 0; gap: 8px; }
+#brief-form #start { grid-area: start; width: auto; padding: 0 30px; font-size: 13px; }
+.mode-card { padding: 8px 12px; gap: 1px; border-radius: 14px; background: rgba(255, 255, 255, 0.04); }
+.mode-name { font-size: 12px; }
+.mode-cost { font-size: 12.5px; }
+.mode-desc { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#working .progress { height: 12px; }
+#progress-bar { background: linear-gradient(90deg, var(--accent-3), var(--accent)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); }
+@media (max-width: 860px) {
+  #brief-form { grid-template-columns: 1fr; grid-template-areas: "brief" "modes" "start"; }
+  #brief-form #start { width: 100%; padding: 13px; }
+}
+/* Shorter screens: a tighter composer so the office keeps the stage. */
+@media (min-width: 861px) and (max-height: 900px) {
+  #console { padding: 12px; }
+  #console .console-head { margin-bottom: 8px; }
+  #brief { min-height: 54px; }
+  .mode-desc { display: none; }
+  .mode-card { padding: 7px 12px; }
+}
+
+#log { overflow-x: hidden; }
+.perks li { position: relative; display: block; padding: 10px 12px 10px 30px; }
+.perks li::before { position: absolute; left: 13px; top: 17px; margin: 0; }
+/* Let the composer shrink on small screens (its one-line descriptions must not widen the page). */
+.modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mode, .mode-card { min-width: 0; }
+@media (max-width: 860px) { #brief-form { grid-template-columns: minmax(0, 1fr); } }
+/* The hidden mode radios sit inside their card; full-width they widened the page on phones. */
+.mode { position: relative; }
+.mode input { width: 1px; height: 1px; margin: 0; }
