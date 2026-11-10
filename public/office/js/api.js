@@ -63,8 +63,13 @@ export const realApi = {
     return out;
   },
   async linkWallet() {
-    const proof = await signWith("link");
-    const out = await request("POST", "/auth/link", proof);
+    return this.linkWithSignature(await signWith("link"));
+  },
+  // Wallets that can't sign in the browser (OKX Agentic Wallet): get the
+  // challenge for their address, sign it elsewhere, paste the signature back.
+  linkChallenge: (address) => request("POST", "/auth/challenge", { address, purpose: "link" }),
+  async linkWithSignature({ nonce, signature }) {
+    const out = await request("POST", "/auth/link", { nonce, signature });
     storage.set(out.token);
     return out;
   },

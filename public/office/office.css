@@ -239,6 +239,15 @@ legend { padding: 0; font-weight: 600; }
 .okx-box .tag { color: var(--blue); border-color: #1d4c66; }
 .okx-why { color: var(--muted); margin: 8px 0; }
 .okx-why b { color: var(--gold); }
+.sign-elsewhere { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel-2); }
+.sign-elsewhere p { margin: 0 0 6px; }
+/* The command is one very long line: keep it from sizing the overlay's grid column. */
+.sign-elsewhere .copy code { contain: inline-size; }
+.sign-elsewhere details { margin-top: 8px; }
+.sign-elsewhere pre { margin: 6px 0 0; padding: 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); font-size: 12px; }
+.sign-elsewhere .field { margin-top: 10px; }
+.sign-elsewhere textarea { margin-top: 6px; font-family: ui-monospace, monospace; font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.sign-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .ceo-card { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid rgba(255, 201, 77, 0.5); border-radius: var(--r-sm); background: var(--panel-2); margin-top: 6px; }
 .ceo-card .crown { width: 44px; height: 44px; display: grid; place-items: center; background: var(--well); color: var(--gold); font: 700 22px var(--display); flex: none; }
 .steps { padding-left: 20px; display: grid; gap: 12px; margin: 14px 0; }

@@ -359,6 +359,7 @@ function showRegister(wallets, candidates) {
 async function lookupOkx(inputId, cardId) {
   const id = $(inputId).value.trim();
   const card = $(cardId);
+  $(`${cardId}-sign`)?.remove();
   if (!id) { card.hidden = true; return null; }
   card.className = "idcard";
   card.replaceChildren(el("span", { class: "muted" }, "Reading X Layer…"));
@@ -376,7 +377,10 @@ async function lookupOkx(inputId, cardId) {
         el("span", { class: "small muted" }, `Agent #${info.agentId} · owner ${short(info.owner)}`), el("br"),
         info.taken ? el("span", { class: "small error" }, "This identity already belongs to a studio.")
           : mine ? el("span", { class: "small", style: "color:var(--green)" }, "✓ You control this identity")
-            : el("span", { class: "small error" }, "Owned by another wallet. ", el("button", { type: "button", class: "linkish", onclick: () => linkWallet(inputId, cardId) }, "Link that wallet"))));
+            : el("span", { class: "small error" }, "Owned by another wallet. ",
+              el("button", { type: "button", class: "linkish", onclick: () => linkWallet(inputId, cardId) }, "Link that wallet"),
+              " or ",
+              el("button", { type: "button", class: "linkish", onclick: () => signElsewhere(info, inputId, cardId) }, "sign with OKX Agentic Wallet"))));
     return ok ? info : null;
   } catch (e) {
     card.className = "idcard bad";
@@ -397,6 +401,47 @@ async function linkWallet(inputId, cardId) {
     toast("Wallet linked.");
     if ($(inputId).value.trim()) lookupOkx(inputId, cardId);
   } catch (e) { toast(e.message, true); }
+}
+
+// OKX Agentic Wallet keys live in OKX's enclave, so that wallet can't sign in
+// this browser. Show the challenge as an `onchainos` command; the owner runs
+// it (or has their agent sign the message) and pastes the signature back.
+async function signElsewhere(info, inputId, cardId) {
+  const panelId = `${cardId}-sign`;
+  $(panelId)?.remove();
+  let ch;
+  try { ch = await api.linkChallenge(info.owner); } catch (e) { toast(e.message, true); return; }
+  // One line, "\n" written out: the CLI signs it literally and the server accepts that form.
+  const command = `onchainos wallet sign-message --type personal --chain 196 --from ${info.owner} --message "${ch.message.replace(/\n/g, "\\n")}"`;
+  const sig = el("textarea", { rows: 2, placeholder: "0x…", spellcheck: "false", autocomplete: "off" });
+  const go = el("button", { type: "button", class: "btn primary small", onclick: async () => {
+    const signature = sig.value.trim();
+    if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) { toast("Paste the signature: 0x followed by 130 hex characters.", true); return; }
+    busy(go, true, "Linking…");
+    try {
+      const out = await api.linkWithSignature({ nonce: ch.nonce, signature });
+      $("reg-wallets").textContent = out.wallets.map(short).join(", ");
+      toast("Wallet linked.");
+      lookupOkx(inputId, cardId);
+    } catch (e) { busy(go, false); toast(e.message, true); }
+  } }, "Link wallet");
+  $(cardId).after(el("div", { id: panelId, class: "sign-elsewhere" },
+    el("p", { class: "small" }, `Sign with the wallet that owns agent #${info.agentId} (${short(info.owner)}). It costs no gas and sends nothing on-chain.`),
+    el("p", { class: "small muted" }, "Run this command, or ask your agent to sign the message with your OKX Agentic Wallet:"),
+    copyRow(command),
+    el("details", {}, el("summary", { class: "small muted" }, "Show the message"), el("pre", {}, ch.message)),
+    el("label", { class: "field" }, "Signature", sig),
+    el("div", { class: "sign-foot" },
+      el("span", { class: "small muted" }, `Expires at ${new Date(ch.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`),
+      go)));
+}
+
+function copyRow(text) {
+  const btn = el("button", { type: "button", class: "btn small", onclick: async () => {
+    try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; setTimeout(() => { btn.textContent = "Copy"; }, 1500); }
+    catch { toast("Copy failed. Select the text and copy it manually.", true); }
+  } }, "Copy");
+  return el("div", { class: "copy" }, el("code", {}, text), btn);
 }
 
 for (const b of document.querySelectorAll(".sign-out")) b.addEventListener("click", signOutEverywhere);

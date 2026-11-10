@@ -116,6 +116,23 @@ test("sign-in rejects a signature from another wallet and replays", async () => 
   token = ok.body.token;
 });
 
+test("a CLI wallet links by signing the one-line challenge (onchainos signs \\n literally)", async () => {
+  const cli = Wallet.createRandom();
+  const flat = (m) => m.replace(/\n/g, "\\n");
+  const ch = await call("POST", "/auth/challenge", { address: cli.address, purpose: "link" });
+  assert.ok(ch.body.expiresAt > Date.now());
+  const bad = await call("POST", "/auth/link", { nonce: ch.body.nonce, signature: await stranger.signMessage(flat(ch.body.message)) }, token);
+  assert.equal(bad.status, 401);
+  const ch2 = await call("POST", "/auth/challenge", { address: cli.address, purpose: "link" });
+  const ok = await call("POST", "/auth/link", { nonce: ch2.body.nonce, signature: await cli.signMessage(flat(ch2.body.message)) }, token);
+  assert.equal(ok.status, 200);
+  assert.ok(ok.body.wallets.includes(cli.address.toLowerCase()));
+  // A sign-in challenge can't be spent as a link, in either form.
+  const ch3 = await call("POST", "/auth/challenge", { address: cli.address });
+  const wrong = await call("POST", "/auth/link", { nonce: ch3.body.nonce, signature: await cli.signMessage(flat(ch3.body.message)) }, token);
+  assert.equal(wrong.status, 401);
+});
+
 test("the office is closed until you register a studio", async () => {
   const r = await call("GET", "/agency", null, token);
   assert.equal(r.status, 404);

@@ -129,6 +129,8 @@ export function createDemoApi() {
     config: async () => ({ credits: { starting: 1000, pro: 40, ultra: 100, edit: 10 }, modes: { pro: { label: "Pro", cost: 40 }, ultra: { label: "Ultra", cost: 100 } }, employees: EMPLOYEES }),
     signIn: async () => ({ wallets: ["0xdemo"], hasAgency: true }),
     linkWallet: async () => ({ wallets: ["0xdemo"] }),
+    linkChallenge: async (address) => ({ nonce: "demo", message: `Link this wallet to your Kult Create studio.\n\nWallet: ${address}\nNonce: demo`, expiresAt: Date.now() + 600000 }),
+    linkWithSignature: async () => ({ wallets: ["0xdemo"] }),
     me: async () => ({ wallets: ["0xdemo"], agency: { ...agency } }),
     agency: async () => ({ agency: { ...agency }, productions: [...productions.values()].reverse().map((p) => ({ ...p, events: undefined })) }),
     okx: async (id) => ({ agentId: id, name: `OKX.ai Agent #${id}`, owner: "0xdemo", taken: false }),

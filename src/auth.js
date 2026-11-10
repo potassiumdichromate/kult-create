@@ -28,19 +28,28 @@ export function createChallenge(address, purpose = "sign-in") {
     "",
     "This signature proves you own this wallet. It costs no gas and authorizes no transaction."
   ].join("\n");
-  challenges.set(nonce, { address: wallet, purpose, message, exp: Date.now() + NONCE_TTL_MS });
-  return { nonce, message };
+  const exp = Date.now() + NONCE_TTL_MS;
+  challenges.set(nonce, { address: wallet, purpose, message, exp });
+  return { nonce, message, expiresAt: exp };
 }
 
 export function verifyChallenge({ nonce, signature, purpose = "sign-in" }) {
   const c = challenges.get(String(nonce || ""));
   if (!c || c.exp < Date.now() || c.purpose !== purpose) throw Object.assign(new Error("Sign-in request expired. Please try again."), { status: 401 });
   challenges.delete(nonce); // one use only
-  let signer;
-  try { signer = verifyMessage(c.message, String(signature || "")).toLowerCase(); } catch { signer = null; }
-  if (signer !== c.address) throw Object.assign(new Error("Signature does not match the wallet"), { status: 401 });
+  const signerOf = (message) => { try { return verifyMessage(message, String(signature || "")).toLowerCase(); } catch { return null; } };
+  // Browser wallets sign the message as shown. CLI wallets (OKX Agentic Wallet:
+  // `onchainos wallet sign-message --message "..."`) take it as one shell
+  // argument and sign "\n" literally, so the one-line form of the same
+  // challenge is accepted too: same wallet, nonce and expiry.
+  if (![c.message, oneLine(c.message)].some((m) => signerOf(m) === c.address)) {
+    throw Object.assign(new Error("Signature does not match the wallet"), { status: 401 });
+  }
   return c.address;
 }
+
+/** The challenge as a single line, with each line break written as "\n". */
+export const oneLine = (message) => message.replace(/\n/g, "\\n");
 
 const b64 = (s) => Buffer.from(s).toString("base64url");
 const sign = (payload) => createHmac("sha256", config.sessionSecret).update(payload).digest("base64url");
