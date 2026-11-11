@@ -359,6 +359,25 @@ test("top games across Kult Create are playable in the office", async () => {
   assert.equal((await call("GET", "/games/top")).status, 401);
 });
 
+test("anyone can list the top games, with public fields only", async () => {
+  fakeStudio.topGames = async ({ limit }) => {
+    assert.equal(limit, 30);
+    return { games: [
+      { id: "g1", title: "Test Game", plays: 99, likes: 5, studio: { agencyId: "agency-1", name: "Rivals" }, computeRunId: "run_9", playUrl: null },
+      { id: "g2", title: "", plays: 50, likes: 1, studio: { agencyId: null, name: "Pixel Pirates" }, computeRunId: null, playUrl: "https://studio/play?gameId=g2" }
+    ] };
+  };
+  const r = await call("GET", "/games/public");
+  assert.equal(r.status, 200);
+  assert.equal(r.body.games.length, 2);
+  assert.match(r.body.games[0].playUrl, /\/play\/run_9$/);
+  assert.equal(r.body.games[0].studio, "Rivals");
+  assert.equal(r.body.games[1].title, "Untitled game");
+  assert.equal(r.body.games[1].playUrl, "https://studio/play?gameId=g2");
+  assert.equal(r.body.games[0].agencyId, undefined);
+  assert.equal(JSON.stringify(r.body).includes("agency-1"), false);
+});
+
 test("the OKX gateway finds a studio by wallet and runs a paid build for it", async () => {
   const { config } = await import("../src/config.js");
   const gw = (method, path, body, key = "gw-test-key") =>

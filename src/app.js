@@ -243,6 +243,23 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
     });
   }));
 
+  // The same list for anyone, signed in or not: Kult World's Game Hub shows it
+  // in its Kult Create Games folder. Public fields only.
+  app.get("/games/public", wrap(async (req, res) => {
+    const { games } = await studio.topGames({ limit: Math.min(Number(req.query.limit) || 30, 50) });
+    res.set("Cache-Control", "public, max-age=60").json({
+      games: games.map((g, i) => ({
+        id: g.id,
+        rank: i + 1,
+        title: g.title || "Untitled game",
+        studio: g.studio?.name || null,
+        plays: Number(g.plays) || 0,
+        likes: Number(g.likes) || 0,
+        playUrl: g.computeRunId ? `${config.computeLayer.url}/play/${encodeURIComponent(g.computeRunId)}` : g.playUrl || null
+      }))
+    });
+  }));
+
   app.get("/ledger", requireAuth, needAgency, wrap(async (req, res) => {
     res.json({ entries: await store.find("ledger", { agencyId: req.agency.id }, { sort: { at: -1 }, limit: 100 }) });
   }));
