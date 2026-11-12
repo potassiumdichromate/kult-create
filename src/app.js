@@ -13,6 +13,20 @@ import { verifyPrivy, privyConfigured } from "./privy.js";
 import { buildDashboard } from "./dashboard.js";
 import { GAME_ID, buildPlayHtml, publicGameInfo } from "./play.js";
 
+// A player's activity on a published game (relayed to Creator Studio, which checks it again).
+const viewSchema = z.object({ userId: z.string().trim().min(1).max(120).optional() }).strict();
+const qualifiedPlaySchema = z.object({
+  userId: z.string().trim().min(1).max(120),
+  sessionId: z.string().trim().min(1).max(200),
+  durationSeconds: z.coerce.number().positive().max(86_400),
+  deviceId: z.string().trim().max(200).optional()
+}).strict();
+const scoreSchema = z.object({
+  userId: z.string().trim().min(1).max(120),
+  username: z.string().trim().min(1).max(50),
+  score: z.coerce.number().finite().nonnegative().max(1e12)
+}).strict();
+
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(40),
   tagline: z.string().trim().max(120).optional().default(""),
@@ -255,9 +269,44 @@ export function createApp({ store, productions, chain = defaultChain, studio = d
         studio: g.studio?.name || null,
         plays: Number(g.plays) || 0,
         likes: Number(g.likes) || 0,
+        cover: g.thumbnailUrl || null,
+        // "studio": the game runs from /play/:gameId/game.html here, in a
+        // sandbox, with the score bridge. "compute": only its pipeline page plays it.
+        runner: g.computeRunId ? "compute" : "studio",
         playUrl: g.computeRunId ? `${config.computeLayer.url}/play/${encodeURIComponent(g.computeRunId)}` : g.playUrl || null
       }))
     });
+  }));
+
+  // A player's view, qualified play (30 s or more: KP for the player, creator
+  // score for the studio), score and the game's leaderboard, relayed to
+  // Creator Studio exactly as its own player sends them. Public, like there;
+  // the player's IP and device go along for Creator Studio's anti-fraud.
+  const playerHeaders = (req) => {
+    const h = { "x-forwarded-for": req.get("x-forwarded-for") || req.ip || "" };
+    if (req.get("x-device-id")) h["x-device-id"] = req.get("x-device-id").slice(0, 200);
+    return h;
+  };
+  const gameParam = (req) => {
+    if (!GAME_ID.test(req.params.gameId)) throw Object.assign(new Error("Game not found"), { status: 404 });
+    return req.params.gameId;
+  };
+  app.post("/games/:gameId/view", wrap(async (req, res) => {
+    const body = viewSchema.parse(req.body ?? {});
+    res.status(201).json(await studio.view(gameParam(req), body, playerHeaders(req)));
+  }));
+  app.post("/games/:gameId/play", wrap(async (req, res) => {
+    const body = qualifiedPlaySchema.parse(req.body ?? {});
+    const out = await studio.qualifyPlay(gameParam(req), body, playerHeaders(req));
+    res.status(out?.qualified ? 201 : 202).json(out);
+  }));
+  app.post("/games/:gameId/score", wrap(async (req, res) => {
+    const body = scoreSchema.parse(req.body ?? {});
+    res.status(201).json(await studio.submitScore(gameParam(req), body, playerHeaders(req)));
+  }));
+  app.get("/games/:gameId/leaderboard", wrap(async (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
+    res.set("Cache-Control", "public, max-age=15").json(await studio.leaderboard(gameParam(req), limit));
   }));
 
   app.get("/ledger", requireAuth, needAgency, wrap(async (req, res) => {

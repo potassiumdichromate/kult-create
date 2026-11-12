@@ -4,13 +4,13 @@ import { config } from "./config.js";
 //   compute layer  — builds games with the multi-agent DAG
 //   creator studio — stores and publishes finished games
 
-async function call(base, key, keyHeader, method, path, body, serviceName) {
+async function call(base, key, keyHeader, method, path, body, serviceName, extraHeaders = {}) {
   let res;
   try {
     res = await fetch(`${base}${path}`, {
       method,
       signal: AbortSignal.timeout(60_000),
-      headers: { "Content-Type": "application/json", ...(key ? { [keyHeader]: key } : {}) },
+      headers: { "Content-Type": "application/json", ...(key ? { [keyHeader]: key } : {}), ...extraHeaders },
       body: body ? JSON.stringify(body) : undefined
     });
   } catch (error) {
@@ -24,7 +24,7 @@ async function call(base, key, keyHeader, method, path, body, serviceName) {
 }
 
 const compute = (method, path, body) => call(config.computeLayer.url, config.computeLayer.key, "x-compute-key", method, path, body, "The studio pipeline");
-const studio = (method, path, body) => call(config.creatorStudio.url, config.creatorStudio.key, "x-kult-create-key", method, path, body, "Creator Studio");
+const studio = (method, path, body, headers) => call(config.creatorStudio.url, config.creatorStudio.key, "x-kult-create-key", method, path, body, "Creator Studio", headers);
 
 export const computeLayer = {
   build: ({ prompt, tier, gameId }) => compute("POST", "/v1/runs", { prompt, tier, gameId }),
@@ -46,6 +46,13 @@ export const withStudioLink = (published) => (published ? { ...published, playUr
 export const creatorStudio = {
   // One published game, with its code. Unpublished games answer 404.
   game: (gameId) => studio("GET", `/api/games/${encodeURIComponent(gameId)}`),
+  // A player's activity on a published game, the same public calls Creator
+  // Studio's own player makes. `headers` carries the player's IP and device,
+  // which Creator Studio's anti-fraud reads.
+  view: (gameId, body, headers) => studio("POST", `/api/social/views/${encodeURIComponent(gameId)}`, body, headers),
+  qualifyPlay: (gameId, body, headers) => studio("POST", `/api/social/plays/${encodeURIComponent(gameId)}/qualify`, body, headers),
+  submitScore: (gameId, body, headers) => studio("POST", `/api/leaderboards/${encodeURIComponent(gameId)}/scores`, body, headers),
+  leaderboard: (gameId, limit = 10) => studio("GET", `/api/leaderboards/${encodeURIComponent(gameId)}?limit=${limit}`),
   // Imports the finished compute-layer run as a game owned by the studio's
   // wallet (art copied to R2, 0G provenance) and optionally publishes it.
   importRun: ({ runId, creatorWallet, studio: studioInfo, publish, gameId }) =>

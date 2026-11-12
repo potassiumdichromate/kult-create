@@ -34,7 +34,34 @@ function prepareModule(code) {
 // Runs before the game, as its own script: a syntax error in the game can't stop
 // these handlers from being installed.
 const HARNESS = String.raw`
-window.reportScore = window.reportScore || function () {};
+// Leaderboard score bridge, as Creator Studio's player has it: games call
+// window.reportScore(score) when a run ends, and the page around the game
+// (Kult World's Game Hub) submits it. Games that predate the API are read
+// off their HUD: the best "Score: N" drawn, sent when game-over text shows.
+(function () {
+  var best = 0, explicit = false, lastSentAt = 0;
+  function send(score) {
+    var value = Math.max(0, Math.floor(Number(score) || 0));
+    try { window.parent.postMessage({ __kultGameScore: value }, "*"); } catch (e) {}
+  }
+  window.reportScore = function (score) { explicit = true; send(score); };
+  var scoreRe = /(?:score|pts|points)\s*[:\-]?\s*([0-9][0-9,]*)/i;
+  var overRe = /game\s*over|you\s*win|you\s*lose|you\s*died|crashed|squashed|board\s*cleared|out\s*of\s*moves|quiz\s*complete|wins|you\s*fell|press\s*r|tap\s*to\s*restart|play\s*again/i;
+  function scan(text) {
+    var s = String(text);
+    var over = overRe.test(s);
+    if (over) window.__kultGameOver = true;
+    if (explicit) return;
+    var m = s.match(scoreRe);
+    if (m) { var v = parseInt(m[1].replace(/,/g, ""), 10); if (isFinite(v)) best = Math.max(best, v); }
+    if (over && Date.now() - lastSentAt > 5000) { lastSentAt = Date.now(); send(best); }
+  }
+  var fill = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+    scan(text);
+    return maxWidth === undefined ? fill.call(this, text, x, y) : fill.call(this, text, x, y, maxWidth);
+  };
+})();
 
 function paintFailure(message) {
   var c = document.querySelector("#game");

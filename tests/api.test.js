@@ -376,6 +376,50 @@ test("anyone can list the top games, with public fields only", async () => {
   assert.equal(r.body.games[1].playUrl, "https://studio/play?gameId=g2");
   assert.equal(r.body.games[0].agencyId, undefined);
   assert.equal(JSON.stringify(r.body).includes("agency-1"), false);
+  assert.equal(r.body.games[0].runner, "compute");
+  assert.equal(r.body.games[1].runner, "studio");
+  assert.equal(r.body.games[1].cover, null);
+});
+
+test("a player's view, qualified play, score and the leaderboard reach Creator Studio", async () => {
+  const sent = [];
+  fakeStudio.view = async (id, body, headers) => { sent.push(["view", id, body, headers]); return { gameId: id, views: 7 }; };
+  fakeStudio.qualifyPlay = async (id, body, headers) => { sent.push(["play", id, body, headers]); return { qualified: true, points: { awarded: true, points: 5 } }; };
+  fakeStudio.submitScore = async (id, body, headers) => { sent.push(["score", id, body, headers]); return { gameId: id, entries: [{ rank: 1, username: body.username, score: body.score }] }; };
+  fakeStudio.leaderboard = async (id, limit) => { sent.push(["board", id, limit]); return { gameId: id, entries: [] }; };
+  const post = (path, body, headers = {}) => fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) })
+    .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+
+  const view = await post("/games/g7/view", { userId: "0xabc" }, { "x-forwarded-for": "203.0.113.9" });
+  assert.equal(view.status, 201);
+  assert.equal(view.body.views, 7);
+  assert.equal(sent[0][3]["x-forwarded-for"], "203.0.113.9");
+
+  const play = await post("/games/g7/play", { userId: "0xabc", sessionId: "g7:0xabc:1", durationSeconds: 31 }, { "x-device-id": "dev-1" });
+  assert.equal(play.status, 201);
+  assert.equal(sent[1][3]["x-device-id"], "dev-1");
+
+  const score = await post("/games/g7/score", { userId: "0xabc", username: "Neon", score: 1200 });
+  assert.equal(score.status, 201);
+  assert.deepEqual(sent[2][2], { userId: "0xabc", username: "Neon", score: 1200 });
+
+  const board = await call("GET", "/games/g7/leaderboard?limit=5");
+  assert.equal(board.status, 200);
+  assert.deepEqual(sent[3], ["board", "g7", 5]);
+
+  // Bad input stops here; Creator Studio is never called.
+  assert.equal((await post("/games/g7/play", { userId: "0xabc", sessionId: "s", durationSeconds: -1 })).status, 400);
+  assert.equal((await post("/games/g7/score", { userId: "0xabc", score: 5 })).status, 400);
+  assert.equal((await post("/games/g7/score", { userId: "0xabc", username: "Neon", score: 5, extra: 1 })).status, 400);
+  assert.equal((await post("/games/bad%20id/view", {})).status, 404);
+  assert.equal(sent.length, 4);
+});
+
+test("the game harness sends scores to the page around it", async () => {
+  const { buildPlayHtml } = await import("../src/play.js");
+  const html = buildPlayHtml({ id: "g1", title: "T", refinement: { generatedCode: "const x = 1;" } });
+  assert.match(html, /__kultGameScore/);
+  assert.match(html, /window\.reportScore = function/);
 });
 
 test("the OKX gateway finds a studio by wallet and runs a paid build for it", async () => {
