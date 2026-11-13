@@ -248,7 +248,8 @@ legend { padding: 0; font-weight: 600; }
 .sign-elsewhere .field { margin-top: 10px; }
 .sign-elsewhere textarea { margin-top: 6px; font-family: ui-monospace, monospace; font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
 .sign-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
-.ceo-card { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid rgba(255, 201, 77, 0.5); border-radius: var(--r-sm); background: var(--panel-2); margin-top: 6px; }
+.ceo-card { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid rgba(255, 201, 77, 0.5); border-radius: var(--r-sm); background: var(--panel-2); margin-top: 6px; grid-column: 1 / -1; min-width: 0; }
+.ceo-card > div { min-width: 0; overflow-wrap: anywhere; }
 .ceo-card .crown { width: 44px; height: 44px; display: grid; place-items: center; background: var(--well); color: var(--gold); font: 700 22px var(--display); flex: none; }
 .steps { padding-left: 20px; display: grid; gap: 12px; margin: 14px 0; }
 .copy { display: flex; gap: 8px; align-items: center; margin-top: 6px; }

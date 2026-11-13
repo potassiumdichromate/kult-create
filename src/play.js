@@ -57,9 +57,29 @@ const HARNESS = String.raw`
     if (over && Date.now() - lastSentAt > 5000) { lastSentAt = Date.now(); send(best); }
   }
   var fill = CanvasRenderingContext2D.prototype.fillText;
+  var stroke = CanvasRenderingContext2D.prototype.strokeText;
+  // Generated games often flip the canvas (ctx.scale(-1, 1)) to face a sprite
+  // left and then draw their title or HUD before undoing it, so the text comes
+  // out mirrored. Text is never meant to read backwards: draw it unflipped,
+  // over the same stretch of screen (left and right alignment swap).
+  var SWAP = { left: "right", right: "left", start: "end", end: "start" };
+  function draw(ctx, fn, text, x, y, maxWidth) {
+    var m = ctx.getTransform ? ctx.getTransform() : null;
+    if (!m || !(m.a < 0) || Math.abs(m.b) > 1e-6 || Math.abs(m.c) > 1e-6) {
+      return maxWidth === undefined ? fn.call(ctx, text, x, y) : fn.call(ctx, text, x, y, maxWidth);
+    }
+    ctx.save();
+    ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0);
+    if (SWAP[ctx.textAlign]) ctx.textAlign = SWAP[ctx.textAlign];
+    try { return maxWidth === undefined ? fn.call(ctx, text, x, y) : fn.call(ctx, text, x, y, maxWidth); }
+    finally { ctx.restore(); }
+  }
   CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
     scan(text);
-    return maxWidth === undefined ? fill.call(this, text, x, y) : fill.call(this, text, x, y, maxWidth);
+    return draw(this, fill, text, x, y, maxWidth);
+  };
+  CanvasRenderingContext2D.prototype.strokeText = function (text, x, y, maxWidth) {
+    return draw(this, stroke, text, x, y, maxWidth);
   };
 })();
 
